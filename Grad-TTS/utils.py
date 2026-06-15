@@ -6,6 +6,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
+from typing import List
 import os
 import glob
 import numpy as np
@@ -21,7 +22,7 @@ def intersperse(lst, item):
     return result
 
 
-def parse_filelist(filelist_path, split_char="|"):
+def parse_filelist(filelist_path: str, split_char: str = "|") -> List[List[str]]:
     with open(filelist_path, encoding="utf-8") as f:
         filepaths_and_text = [line.strip().split(split_char) for line in f]
     return filepaths_and_text
@@ -45,10 +46,19 @@ def load_checkpoint(logdir, model, num=None):
     return model
 
 
-def save_figure_to_numpy(fig):
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    return data
+def save_figure_to_numpy(fig: plt.Figure):
+    buffer = fig.canvas.buffer_rgba()  # ty:ignore[unresolved-attribute]
+
+    # この時点では、画像の各ピクセルが1次元の配列として格納されている。
+    one_line_img: np.ndarray = np.frombuffer(buffer, dtype=np.uint8)
+
+    # 画像の大きさを取得する。
+    w, h = fig.canvas.get_width_height()
+    c = len(one_line_img) // (w * h)  # channel 数
+
+    # numpy 配列に変換する
+    img = one_line_img.reshape(h, w, c)
+    return img
 
 
 def plot_tensor(tensor):

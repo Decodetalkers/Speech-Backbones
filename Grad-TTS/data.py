@@ -24,8 +24,8 @@ from hifi_gan.meldataset import mel_spectrogram
 class TextMelDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        filelist_path,
-        cmudict_path,
+        filelist_path: str,
+        cmudict_path: str,
         add_blank=True,
         n_fft=1024,
         n_mels=80,
@@ -48,7 +48,9 @@ class TextMelDataset(torch.utils.data.Dataset):
         random.seed(random_seed)
         random.shuffle(self.filepaths_and_text)
 
-    def get_pair(self, filepath_and_text) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_pair(
+        self, filepath_and_text: List[str]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         filepath, text = filepath_and_text[0], filepath_and_text[1]
         text = self.get_text(text, add_blank=self.add_blank)
         mel = self.get_mel(filepath)
@@ -70,7 +72,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         ).squeeze()
         return mel
 
-    def get_text(self, text, add_blank=True) -> torch.Tensor:
+    def get_text(self, text: str, add_blank=True) -> torch.Tensor:
         text_norm = text_to_sequence(text, dictionary=self.cmudict)
         if self.add_blank:
             text_norm = intersperse(

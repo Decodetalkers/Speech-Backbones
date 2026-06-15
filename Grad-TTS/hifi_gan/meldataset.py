@@ -1,5 +1,9 @@
 """from https://github.com/jik876/hifi-gan"""
 
+import torchaudio
+
+from typing import Optional, Dict
+
 import math
 import os
 import random
@@ -26,7 +30,9 @@ def dynamic_range_decompression(x, C=1):
     return np.exp(x) / C
 
 
-def dynamic_range_compression_torch(x, C=1, clip_val=1e-5):
+def dynamic_range_compression_torch(
+    x: torch.Tensor, C: int = 1, clip_val: float = 1e-5
+) -> torch.Tensor:
     return torch.log(torch.clamp(x, min=clip_val) * C)
 
 
@@ -34,7 +40,7 @@ def dynamic_range_decompression_torch(x, C=1):
     return torch.exp(x) / C
 
 
-def spectral_normalize_torch(magnitudes):
+def spectral_normalize_torch(magnitudes: torch.Tensor) -> torch.Tensor:
     output = dynamic_range_compression_torch(magnitudes)
     return output
 
@@ -44,13 +50,22 @@ def spectral_de_normalize_torch(magnitudes):
     return output
 
 
-mel_basis = {}
+mel_basis: Dict[str, torch.Tensor] = {}
 hann_window = {}
 
 
 def mel_spectrogram(
-    y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax, center=False
+    y: torch.Tensor,
+    n_fft: int,
+    num_mels: int,
+    sampling_rate: int,
+    hop_size: int,
+    win_size: int,
+    fmin: float,
+    fmax: Optional[float],
+    center: bool = False,
 ) -> torch.Tensor:
+
     if torch.min(y) < -1.0:
         print("min value is ", torch.min(y))
     if torch.max(y) > 1.0:
@@ -58,7 +73,9 @@ def mel_spectrogram(
 
     global mel_basis, hann_window
     if fmax not in mel_basis:
-        mel = librosa_mel_fn(sampling_rate, n_fft, num_mels, fmin, fmax)  # ty:ignore[missing-argument, too-many-positional-arguments]
+        mel = librosa_mel_fn(
+            sr=sampling_rate, n_fft=n_fft, n_mels=num_mels, fmin=fmin, fmax=fmax
+        )
         mel_basis[str(fmax) + "_" + str(y.device)] = (
             torch.from_numpy(mel).float().to(y.device)
         )
@@ -70,24 +87,17 @@ def mel_spectrogram(
         mode="reflect",
     )
     y = y.squeeze(1)
-
-    spec = torch.stft(
-        y,
-        n_fft,
+    transform = torchaudio.transforms.MelSpectrogram(
+        sample_rate=sampling_rate,
+        n_fft=n_fft,
+        n_mels=num_mels,
         hop_length=hop_size,
         win_length=win_size,
-        window=hann_window[str(y.device)],
+        f_min=fmin,
+        f_max=fmax,
         center=center,
-        pad_mode="reflect",
-        normalized=False,
-        onesided=True,
     )
-
-    spec = torch.sqrt(spec.pow(2).sum(-1) + (1e-9))
-
-    spec = torch.matmul(mel_basis[str(fmax) + "_" + str(y.device)], spec)
-    spec = spectral_normalize_torch(spec)
-
+    spec = transform(y)
     return spec
 
 

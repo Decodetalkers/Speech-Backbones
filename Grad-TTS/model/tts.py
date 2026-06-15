@@ -6,6 +6,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
+from typing import Tuple
 import math
 import random
 
@@ -139,10 +140,12 @@ class GradTTS(BaseModule):
 
         return encoder_outputs, decoder_outputs, attn[:, :, :y_max_length]
 
-    def compute_loss(self, x, x_lengths, y, y_lengths, spk=None, out_size=None):
+    def compute_loss(
+        self, x, x_lengths, y, y_lengths, spk=None, out_size=None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Computes 3 losses:
-            1. duration loss: loss between predicted token durations and those extracted by Monotinic Alignment Search (MAS).
+            1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
             2. prior loss: loss between mel-spectrogram and encoder outputs.
             3. diffusion loss: loss between gaussian noise and its reconstruction by diffusion-based decoder.
 
