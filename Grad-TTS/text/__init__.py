@@ -1,4 +1,5 @@
 """from https://github.com/keithito/tacotron"""
+
 from typing import List
 
 import re
@@ -20,7 +21,9 @@ def get_arpabet(word, dictionary):
         return word
 
 
-def text_to_sequence(text: str, cleaner_names: List[str]=["english_cleaners"], dictionary=None):
+def text_to_sequence(
+    text: str, cleaner_names: List[str] = ["english_cleaners"], dictionary=None
+):
     """Converts a string of text to a sequence of IDs corresponding to the symbols in the text.
 
     The text can optionally have ARPAbet sequences enclosed in curly braces embedded

@@ -89,7 +89,7 @@ class TextMelDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.filepaths_and_text)
 
-    def sample_test_batch(self, size) -> List[Dict[str, torch.Tensor]]:
+    def sample_test_batch(self, size: int) -> List[Dict[str, torch.Tensor]]:
         idx = np.random.choice(range(len(self)), size=size, replace=False)
         test_batch = []
         for index in idx:

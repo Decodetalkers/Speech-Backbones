@@ -43,6 +43,6 @@ def generate_path(duration, mask):
     return path
 
 
-def duration_loss(logw, logw_, lengths):
+def duration_loss(logw, logw_, lengths) -> torch.Tensor:
     loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
     return loss

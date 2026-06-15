@@ -1,4 +1,5 @@
 """from https://github.com/jaywalnut310/glow-tts"""
+from typing import Optional
 
 import math
 
@@ -411,7 +412,7 @@ class TextEncoder(BaseModule):
             p_dropout,
         )
 
-    def forward(self, x, x_lengths, spk=None):
+    def forward(self, x: torch.Tensor, x_lengths: torch.Tensor, spk: Optional[torch.Tensor]=None):
         x = self.emb(x) * math.sqrt(self.n_channels)
         x = torch.transpose(x, 1, -1)
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)

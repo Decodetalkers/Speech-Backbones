@@ -57,9 +57,9 @@ def _expand_number(m):
             return _inflect.number_to_words(num // 100) + " hundred"  # ty:ignore[unsupported-operator, invalid-argument-type]
         else:
             return _inflect.number_to_words(
-                num,
+                num,  # ty:ignore[invalid-argument-type]
                 andword="",
-                zero="oh",  # ty:ignore[invalid-argument-type]
+                zero="oh",
                 group=2,
             ).replace(", ", " ")  # ty:ignore[unresolved-attribute]
     else:

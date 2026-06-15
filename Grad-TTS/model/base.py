@@ -6,6 +6,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
+from typing import List
 import numpy as np
 import torch
 
@@ -25,7 +26,7 @@ class BaseModule(torch.nn.Module):
                 num_params += np.prod(param.detach().cpu().numpy().shape)
         return num_params
 
-    def relocate_input(self, x: list):
+    def relocate_input(self, x: List[torch.Tensor]) -> List[torch.Tensor]:
         """
         Relocates provided tensors to the same device set for the module.
         """

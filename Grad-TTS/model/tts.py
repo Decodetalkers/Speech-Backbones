@@ -6,7 +6,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
-from typing import Tuple
+from typing import Tuple, Optional
 import math
 import random
 
@@ -27,22 +27,22 @@ from model.utils import (
 class GradTTS(BaseModule):
     def __init__(
         self,
-        n_vocab,
-        n_spks,
-        spk_emb_dim,
-        n_enc_channels,
-        filter_channels,
-        filter_channels_dp,
-        n_heads,
-        n_enc_layers,
-        enc_kernel,
-        enc_dropout,
-        window_size,
-        n_feats,
-        dec_dim,
-        beta_min,
-        beta_max,
-        pe_scale,
+        n_vocab: int,
+        n_spks: int,
+        spk_emb_dim: Optional[int],
+        n_enc_channels: int,
+        filter_channels: int,
+        filter_channels_dp: int,
+        n_heads: int,
+        n_enc_layers: int,
+        enc_kernel: int,
+        enc_dropout: float,
+        window_size: int,
+        n_feats: int,
+        dec_dim: int,
+        beta_min: float,
+        beta_max: float,
+        pe_scale: int,
     ):
         super(GradTTS, self).__init__()
         self.n_vocab = n_vocab
@@ -63,6 +63,7 @@ class GradTTS(BaseModule):
         self.pe_scale = pe_scale
 
         if n_spks > 1:
+            assert spk_emb_dim is not None
             self.spk_emb = torch.nn.Embedding(n_spks, spk_emb_dim)
         self.encoder = TextEncoder(
             n_vocab,
@@ -141,7 +142,13 @@ class GradTTS(BaseModule):
         return encoder_outputs, decoder_outputs, attn[:, :, :y_max_length]
 
     def compute_loss(
-        self, x, x_lengths, y, y_lengths, spk=None, out_size=None
+        self,
+        x: torch.Tensor,
+        x_lengths: torch.Tensor,
+        y: torch.Tensor,
+        y_lengths: torch.Tensor,
+        spk: Optional[torch.Tensor]=None,
+        out_size: Optional[int]=None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Computes 3 losses:
