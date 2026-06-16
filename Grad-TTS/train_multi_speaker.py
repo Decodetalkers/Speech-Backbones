@@ -187,7 +187,7 @@ if __name__ == "__main__":
                     x, x_lengths, y, y_lengths, spk=spk, out_size=out_size
                 )
                 loss = sum([dur_loss, prior_loss, diff_loss])
-                loss.backward()
+                loss.backward()  # ty:ignore[unresolved-attribute]
 
                 enc_grad_norm = torch.nn.utils.clip_grad_norm_(
                     model.encoder.parameters(), max_norm=1

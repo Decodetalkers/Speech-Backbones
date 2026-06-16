@@ -6,7 +6,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
-from typing import Tuple, Dict, List
+import os
+from typing import Tuple, Dict, List, Union, BinaryIO
 import random
 import numpy as np
 
@@ -26,14 +27,14 @@ class TextMelDataset(torch.utils.data.Dataset):
         self,
         filelist_path: str,
         cmudict_path: str,
-        add_blank=True,
-        n_fft=1024,
-        n_mels=80,
-        sample_rate=22050,
-        hop_length=256,
-        win_length=1024,
-        f_min=0.0,
-        f_max=8000,
+        add_blank: bool = True,
+        n_fft: int = 1024,
+        n_mels: int = 80,
+        sample_rate: int = 22050,
+        hop_length: int = 256,
+        win_length: int = 1024,
+        f_min: float = 0.0,
+        f_max: int = 8000,
     ):
         self.filepaths_and_text = parse_filelist(filelist_path)
         self.cmudict = cmudict.CMUDict(cmudict_path)
@@ -56,7 +57,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         mel = self.get_mel(filepath)
         return (text, mel)
 
-    def get_mel(self, filepath) -> torch.Tensor:
+    def get_mel(self, filepath: Union[BinaryIO, str, os.PathLike]) -> torch.Tensor:
         audio, sr = ta.load(filepath)
         assert sr == self.sample_rate
         mel = mel_spectrogram(
@@ -72,7 +73,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         ).squeeze()
         return mel
 
-    def get_text(self, text: str, add_blank=True) -> torch.Tensor:
+    def get_text(self, text: str, add_blank: bool = True) -> torch.Tensor:
         text_norm = text_to_sequence(text, dictionary=self.cmudict)
         if self.add_blank:
             text_norm = intersperse(
@@ -124,16 +125,16 @@ class TextMelBatchCollate(object):
 class TextMelSpeakerDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        filelist_path,
-        cmudict_path,
-        add_blank=True,
-        n_fft=1024,
-        n_mels=80,
-        sample_rate=22050,
-        hop_length=256,
-        win_length=1024,
-        f_min=0.0,
-        f_max=8000,
+        filelist_path: str,
+        cmudict_path: str,
+        add_blank: bool = True,
+        n_fft: int = 1024,
+        n_mels: int = 80,
+        sample_rate: int = 22050,
+        hop_length: int = 256,
+        win_length: int = 1024,
+        f_min: float = 0.0,
+        f_max: int = 8000,
     ):
         super().__init__()
         self.filelist = parse_filelist(filelist_path, split_char="|")
@@ -149,14 +150,16 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
         random.seed(random_seed)
         random.shuffle(self.filelist)
 
-    def get_triplet(self, line) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def get_triplet(
+        self, line: List[str]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         filepath, text, speaker = line[0], line[1], line[2]
         text = self.get_text(text, add_blank=self.add_blank)
         mel = self.get_mel(filepath)
         speaker = self.get_speaker(speaker)
         return (text, mel, speaker)
 
-    def get_mel(self, filepath) -> torch.Tensor:
+    def get_mel(self, filepath: str) -> torch.Tensor:
         audio, sr = ta.load(filepath)
         assert sr == self.sample_rate
         mel = mel_spectrogram(
@@ -172,7 +175,7 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
         ).squeeze()
         return mel
 
-    def get_text(self, text, add_blank=True) -> torch.Tensor:
+    def get_text(self, text: str, add_blank: bool = True) -> torch.Tensor:
         text_norm = text_to_sequence(text, dictionary=self.cmudict)
         if self.add_blank:
             text_norm = intersperse(
@@ -181,11 +184,11 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
         text_norm = torch.LongTensor(text_norm)
         return text_norm
 
-    def get_speaker(self, speaker) -> torch.Tensor:
-        speaker = torch.LongTensor([int(speaker)])
+    def get_speaker(self, speaker_label: str) -> torch.Tensor:
+        speaker = torch.LongTensor([int(speaker_label)])
         return speaker
 
-    def __getitem__(self, index) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
         text, mel, speaker = self.get_triplet(self.filelist[index])
         item = {"y": mel, "x": text, "spk": speaker}
         return item
@@ -193,7 +196,7 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.filelist)
 
-    def sample_test_batch(self, size):
+    def sample_test_batch(self, size: int):
         idx = np.random.choice(range(len(self)), size=size, replace=False)
         test_batch = []
         for index in idx:
@@ -202,7 +205,7 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
 
 
 class TextMelSpeakerBatchCollate(object):
-    def __call__(self, batch):
+    def __call__(self, batch: List[Dict[str, torch.Tensor]]):
         B = len(batch)
         y_max_length = max([item["y"].shape[-1] for item in batch])
         y_max_length = fix_len_compatibility(y_max_length)

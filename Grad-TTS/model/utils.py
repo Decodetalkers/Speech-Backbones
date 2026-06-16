@@ -1,29 +1,33 @@
 """from https://github.com/jaywalnut310/glow-tts"""
 
+from typing import Optional, List, Tuple
+
 import torch
 
 
-def sequence_mask(length, max_length=None):
+def sequence_mask(
+    length: torch.Tensor, max_length: Optional[torch.Tensor | int] = None
+) -> torch.Tensor:
     if max_length is None:
         max_length = length.max()
     x = torch.arange(int(max_length), dtype=length.dtype, device=length.device)
     return x.unsqueeze(0) < length.unsqueeze(1)
 
 
-def fix_len_compatibility(length, num_downsamplings_in_unet=2):
+def fix_len_compatibility(length: int, num_downsamplings_in_unet: int = 2) -> int:
     while True:
         if length % (2**num_downsamplings_in_unet) == 0:
             return length
         length += 1
 
 
-def convert_pad_shape(pad_shape):
+def convert_pad_shape(pad_shape: List[List[int]]) -> List[int]:
     l = pad_shape[::-1]
-    pad_shape = [item for sublist in l for item in sublist]
-    return pad_shape
+    pad_shape2 = [item for sublist in l for item in sublist]
+    return pad_shape2
 
 
-def generate_path(duration, mask):
+def generate_path(duration: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     device = duration.device
 
     b, t_x, t_y = mask.shape
@@ -43,6 +47,8 @@ def generate_path(duration, mask):
     return path
 
 
-def duration_loss(logw, logw_, lengths) -> torch.Tensor:
+def duration_loss(
+    logw: torch.Tensor, logw_: torch.Tensor, lengths: torch.Tensor
+) -> torch.Tensor:
     loss = torch.sum((logw - logw_) ** 2) / torch.sum(lengths)
     return loss

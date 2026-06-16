@@ -1,5 +1,6 @@
 """from https://github.com/jaywalnut310/glow-tts"""
-from typing import Optional
+
+from typing import Optional, Tuple
 
 import math
 
@@ -10,7 +11,7 @@ from model.utils import sequence_mask, convert_pad_shape
 
 
 class LayerNorm(BaseModule):
-    def __init__(self, channels, eps=1e-4):
+    def __init__(self, channels: int, eps: float = 1e-4):
         super(LayerNorm, self).__init__()
         self.channels = channels
         self.eps = eps
@@ -18,7 +19,7 @@ class LayerNorm(BaseModule):
         self.gamma = torch.nn.Parameter(torch.ones(channels))
         self.beta = torch.nn.Parameter(torch.zeros(channels))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         n_dims = len(x.shape)
         mean = torch.mean(x, 1, keepdim=True)
         variance = torch.mean((x - mean) ** 2, 1, keepdim=True)
@@ -33,12 +34,12 @@ class LayerNorm(BaseModule):
 class ConvReluNorm(BaseModule):
     def __init__(
         self,
-        in_channels,
-        hidden_channels,
-        out_channels,
-        kernel_size,
-        n_layers,
-        p_dropout,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        n_layers: int,
+        p_dropout: float,
     ):
         super(ConvReluNorm, self).__init__()
         self.in_channels = in_channels
@@ -73,7 +74,7 @@ class ConvReluNorm(BaseModule):
         self.proj.weight.data.zero_()
         self.proj.bias.data.zero_()  # ty:ignore[unresolved-attribute]
 
-    def forward(self, x, x_mask):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor) -> torch.Tensor:
         x_org = x
         for i in range(self.n_layers):
             x = self.conv_layers[i](x * x_mask)
@@ -84,7 +85,9 @@ class ConvReluNorm(BaseModule):
 
 
 class DurationPredictor(BaseModule):
-    def __init__(self, in_channels, filter_channels, kernel_size, p_dropout):
+    def __init__(
+        self, in_channels: int, filter_channels: int, kernel_size: int, p_dropout: float
+    ):
         super(DurationPredictor, self).__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
@@ -101,7 +104,7 @@ class DurationPredictor(BaseModule):
         self.norm_2 = LayerNorm(filter_channels)
         self.proj = torch.nn.Conv1d(filter_channels, 1, 1)
 
-    def forward(self, x, x_mask):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor) -> torch.Tensor:
         x = self.conv_1(x * x_mask)
         x = torch.relu(x)
         x = self.norm_1(x)
@@ -117,14 +120,14 @@ class DurationPredictor(BaseModule):
 class MultiHeadAttention(BaseModule):
     def __init__(
         self,
-        channels,
-        out_channels,
-        n_heads,
-        window_size=None,
-        heads_share=True,
-        p_dropout=0.0,
-        proximal_bias=False,
-        proximal_init=False,
+        channels: int,
+        out_channels: int,
+        n_heads: int,
+        window_size: Optional[int] = None,
+        heads_share: bool = True,
+        p_dropout: float = 0.0,
+        proximal_bias: bool = False,
+        proximal_init: bool = False,
     ):
         super(MultiHeadAttention, self).__init__()
         assert channels % n_heads == 0
@@ -163,7 +166,9 @@ class MultiHeadAttention(BaseModule):
             self.conv_k.bias.data.copy_(self.conv_q.bias.data)  # ty:ignore[unresolved-attribute]
         torch.nn.init.xavier_uniform_(self.conv_v.weight)
 
-    def forward(self, x, c, attn_mask=None):
+    def forward(
+        self, x: torch.Tensor, c: torch.Tensor, attn_mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         q = self.conv_q(x)
         k = self.conv_k(c)
         v = self.conv_v(c)
@@ -173,7 +178,13 @@ class MultiHeadAttention(BaseModule):
         x = self.conv_o(x)
         return x
 
-    def attention(self, query, key, value, mask=None):
+    def attention(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         b, d, t_s, t_t = (*key.size(), query.size(2))
         query = query.view(b, self.n_heads, self.k_channels, t_t).transpose(2, 3)
         key = key.view(b, self.n_heads, self.k_channels, t_s).transpose(2, 3)
@@ -210,15 +221,21 @@ class MultiHeadAttention(BaseModule):
         output = output.transpose(2, 3).contiguous().view(b, d, t_t)
         return output, p_attn
 
-    def _matmul_with_relative_values(self, x, y):
+    def _matmul_with_relative_values(
+        self, x: torch.Tensor, y: torch.Tensor
+    ) -> torch.Tensor:
         ret = torch.matmul(x, y.unsqueeze(0))
         return ret
 
-    def _matmul_with_relative_keys(self, x, y):
+    def _matmul_with_relative_keys(
+        self, x: torch.Tensor, y: torch.Tensor
+    ) -> torch.Tensor:
         ret = torch.matmul(x, y.unsqueeze(0).transpose(-2, -1))
         return ret
 
-    def _get_relative_embeddings(self, relative_embeddings, length):
+    def _get_relative_embeddings(
+        self, relative_embeddings: torch.Tensor, length: int
+    ) -> torch.Tensor:
         pad_length = max(length - (self.window_size + 1), 0)  # ty:ignore[unsupported-operator]
         slice_start_position = max((self.window_size + 1) - length, 0)  # ty:ignore[unsupported-operator]
         slice_end_position = slice_start_position + 2 * length - 1
@@ -234,7 +251,7 @@ class MultiHeadAttention(BaseModule):
         ]
         return used_relative_embeddings
 
-    def _relative_position_to_absolute_position(self, x):
+    def _relative_position_to_absolute_position(self, x: torch.Tensor) -> torch.Tensor:
         batch, heads, length, _ = x.size()
         x = torch.nn.functional.pad(
             x, convert_pad_shape([[0, 0], [0, 0], [0, 0], [0, 1]])
@@ -248,7 +265,7 @@ class MultiHeadAttention(BaseModule):
         ]
         return x_final
 
-    def _absolute_position_to_relative_position(self, x):
+    def _absolute_position_to_relative_position(self, x: torch.Tensor) -> torch.Tensor:
         batch, heads, length, _ = x.size()
         x = torch.nn.functional.pad(
             x, convert_pad_shape([[0, 0], [0, 0], [0, 0], [0, length - 1]])
@@ -260,7 +277,7 @@ class MultiHeadAttention(BaseModule):
         x_final = x_flat.view([batch, heads, length, 2 * length])[:, :, :, 1:]
         return x_final
 
-    def _attention_bias_proximal(self, length):
+    def _attention_bias_proximal(self, length: int) -> torch.Tensor:
         r = torch.arange(length, dtype=torch.float32)
         diff = torch.unsqueeze(r, 0) - torch.unsqueeze(r, 1)
         return torch.unsqueeze(torch.unsqueeze(-torch.log1p(torch.abs(diff)), 0), 0)
@@ -268,7 +285,12 @@ class MultiHeadAttention(BaseModule):
 
 class FFN(BaseModule):
     def __init__(
-        self, in_channels, out_channels, filter_channels, kernel_size, p_dropout=0.0
+        self,
+        in_channels: int,
+        out_channels: int,
+        filter_channels: int,
+        kernel_size: int,
+        p_dropout: float = 0.0,
     ):
         super(FFN, self).__init__()
         self.in_channels = in_channels
@@ -285,7 +307,7 @@ class FFN(BaseModule):
         )
         self.drop = torch.nn.Dropout(p_dropout)
 
-    def forward(self, x, x_mask):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor) -> torch.Tensor:
         x = self.conv_1(x * x_mask)
         x = torch.relu(x)
         x = self.drop(x)
@@ -296,14 +318,13 @@ class FFN(BaseModule):
 class Encoder(BaseModule):
     def __init__(
         self,
-        hidden_channels,
-        filter_channels,
-        n_heads,
-        n_layers,
-        kernel_size=1,
-        p_dropout=0.0,
-        window_size=None,
-        **kwargs,
+        hidden_channels: int,
+        filter_channels: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int = 1,
+        p_dropout: float = 0.0,
+        window_size: Optional[int] = None,
     ):
         super(Encoder, self).__init__()
         self.hidden_channels = hidden_channels
@@ -341,7 +362,7 @@ class Encoder(BaseModule):
             )
             self.norm_layers_2.append(LayerNorm(hidden_channels))
 
-    def forward(self, x, x_mask):
+    def forward(self, x: torch.Tensor, x_mask: torch.Tensor) -> torch.Tensor:
         attn_mask = x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)
         for i in range(self.n_layers):
             x = x * x_mask
@@ -358,18 +379,18 @@ class Encoder(BaseModule):
 class TextEncoder(BaseModule):
     def __init__(
         self,
-        n_vocab,
-        n_feats,
-        n_channels,
-        filter_channels,
-        filter_channels_dp,
-        n_heads,
-        n_layers,
-        kernel_size,
-        p_dropout,
+        n_vocab: int,
+        n_feats: int,
+        n_channels: int,
+        filter_channels: int,
+        filter_channels_dp: int,
+        n_heads: int,
+        n_layers: int,
+        kernel_size: int,
+        p_dropout: int | float,
         window_size=None,
-        spk_emb_dim=64,
-        n_spks=1,
+        spk_emb_dim: int = 64,
+        n_spks: int = 1,
     ):
         super(TextEncoder, self).__init__()
         self.n_vocab = n_vocab
@@ -412,14 +433,20 @@ class TextEncoder(BaseModule):
             p_dropout,
         )
 
-    def forward(self, x: torch.Tensor, x_lengths: torch.Tensor, spk: Optional[torch.Tensor]=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_lengths: torch.Tensor,
+        spk: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = self.emb(x) * math.sqrt(self.n_channels)
         x = torch.transpose(x, 1, -1)
         x_mask = torch.unsqueeze(sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
 
         x = self.prenet(x, x_mask)
         if self.n_spks > 1:
-            x = torch.cat([x, spk.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)  # ty:ignore[unresolved-attribute]
+            assert spk is not None
+            x = torch.cat([x, spk.unsqueeze(-1).repeat(1, 1, x.shape[-1])], dim=1)
         x = self.encoder(x, x_mask)
         mu = self.proj_m(x) * x_mask
 

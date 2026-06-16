@@ -1,9 +1,9 @@
 """from https://github.com/keithito/tacotron"""
 
-from typing import List
+from typing import List, Optional
 
 import re
-from text import cleaners
+from text import cleaners, cmudict
 from text.symbols import symbols
 
 
@@ -13,7 +13,7 @@ _id_to_symbol = {i: s for i, s in enumerate(symbols)}
 _curly_re = re.compile(r"(.*?)\{(.+?)\}(.*)")
 
 
-def get_arpabet(word, dictionary):
+def get_arpabet(word, dictionary: cmudict.CMUDict):
     word_arpabet = dictionary.lookup(word)
     if word_arpabet is not None:
         return "{" + word_arpabet[0] + "}"
@@ -22,8 +22,10 @@ def get_arpabet(word, dictionary):
 
 
 def text_to_sequence(
-    text: str, cleaner_names: List[str] = ["english_cleaners"], dictionary=None
-):
+    text: str,
+    cleaner_names: List[str] = ["english_cleaners"],
+    dictionary: Optional[cmudict.CMUDict] = None,
+) -> List[int]:
     """Converts a string of text to a sequence of IDs corresponding to the symbols in the text.
 
     The text can optionally have ARPAbet sequences enclosed in curly braces embedded
@@ -66,7 +68,7 @@ def text_to_sequence(
     return sequence
 
 
-def sequence_to_text(sequence):
+def sequence_to_text(sequence: List[int]) -> str:
     """Converts a sequence of IDs back to a string"""
     result = ""
     for symbol_id in sequence:
@@ -79,7 +81,7 @@ def sequence_to_text(sequence):
     return result.replace("}{", " ")
 
 
-def _clean_text(text, cleaner_names):
+def _clean_text(text: str, cleaner_names: List[str]) -> str:
     for name in cleaner_names:
         cleaner = getattr(cleaners, name)
         if not cleaner:
@@ -88,13 +90,13 @@ def _clean_text(text, cleaner_names):
     return text
 
 
-def _symbols_to_sequence(symbols):
+def _symbols_to_sequence(symbols: str | List[str]) -> List[int]:
     return [_symbol_to_id[s] for s in symbols if _should_keep_symbol(s)]
 
 
-def _arpabet_to_sequence(text):
+def _arpabet_to_sequence(text: str) -> List[int]:
     return _symbols_to_sequence(["@" + s for s in text.split()])
 
 
-def _should_keep_symbol(s):
+def _should_keep_symbol(s: str) -> bool:
     return s in _symbol_to_id and s != "_" and s != "~"

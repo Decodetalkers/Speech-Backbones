@@ -32,42 +32,42 @@ _abbreviations = [
 ]
 
 
-def expand_abbreviations(text):
+def expand_abbreviations(text: str) -> str:
     for regex, replacement in _abbreviations:
         text = re.sub(regex, replacement, text)
     return text
 
 
-def expand_numbers(text):
+def expand_numbers(text: str) -> str:
     return normalize_numbers(text)
 
 
-def lowercase(text):
+def lowercase(text: str) -> str:
     return text.lower()
 
 
-def collapse_whitespace(text):
+def collapse_whitespace(text: str) -> str:
     return re.sub(_whitespace_re, " ", text)
 
 
-def convert_to_ascii(text):
+def convert_to_ascii(text: str) -> str:
     return unidecode(text)
 
 
-def basic_cleaners(text):
+def basic_cleaners(text: str) -> str:
     text = lowercase(text)
     text = collapse_whitespace(text)
     return text
 
 
-def transliteration_cleaners(text):
+def transliteration_cleaners(text: str) -> str:
     text = convert_to_ascii(text)
     text = lowercase(text)
     text = collapse_whitespace(text)
     return text
 
 
-def english_cleaners(text):
+def english_cleaners(text: str) -> str:
     text = convert_to_ascii(text)
     text = lowercase(text)
     text = expand_numbers(text)

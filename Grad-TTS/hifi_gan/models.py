@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import Conv1d, ConvTranspose1d, AvgPool1d, Conv2d
 from torch.nn.utils import weight_norm, remove_weight_norm, spectral_norm
-from xutils import init_weights, get_padding
+from .xutils import init_weights, get_padding
 
 LRELU_SLOPE = 0.1
 
@@ -192,7 +192,7 @@ class Generator(torch.nn.Module):
                     xs = self.resblocks[i * self.num_kernels + j](x)
                 else:
                     xs += self.resblocks[i * self.num_kernels + j](x)
-            x = xs / self.num_kernels
+            x = xs / self.num_kernels  # ty:ignore[unsupported-operator]
         x = F.leaky_relu(x)
         x = self.conv_post(x)
         x = torch.tanh(x)

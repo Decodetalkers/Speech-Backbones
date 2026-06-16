@@ -6,6 +6,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
+from typing import Optional, Tuple
 import math
 import torch
 from einops import rearrange
@@ -14,7 +15,7 @@ from model.base import BaseModule
 
 
 class Mish(BaseModule):
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x * torch.tanh(torch.nn.functional.softplus(x))
 
 
@@ -23,7 +24,7 @@ class Upsample(BaseModule):
         super(Upsample, self).__init__()
         self.conv = torch.nn.ConvTranspose2d(dim, dim, 4, 2, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.conv(x)
 
 
@@ -32,22 +33,22 @@ class Downsample(BaseModule):
         super(Downsample, self).__init__()
         self.conv = torch.nn.Conv2d(dim, dim, 3, 2, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.conv(x)
 
 
 class Rezero(BaseModule):
-    def __init__(self, fn):
+    def __init__(self, fn: torch.nn.Module):
         super(Rezero, self).__init__()
         self.fn = fn
         self.g = torch.nn.Parameter(torch.zeros(1))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.fn(x) * self.g
 
 
 class Block(BaseModule):
-    def __init__(self, dim, dim_out, groups=8):
+    def __init__(self, dim: int, dim_out: int, groups: int = 8):
         super(Block, self).__init__()
         self.block = torch.nn.Sequential(
             torch.nn.Conv2d(dim, dim_out, 3, padding=1),
@@ -55,13 +56,13 @@ class Block(BaseModule):
             Mish(),
         )
 
-    def forward(self, x, mask):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor):
         output = self.block(x * mask)
         return output * mask
 
 
 class ResnetBlock(BaseModule):
-    def __init__(self, dim, dim_out, time_emb_dim, groups=8):
+    def __init__(self, dim: int, dim_out: int, time_emb_dim: int, groups: int = 8):
         super(ResnetBlock, self).__init__()
         self.mlp = torch.nn.Sequential(Mish(), torch.nn.Linear(time_emb_dim, dim_out))
 
@@ -72,7 +73,7 @@ class ResnetBlock(BaseModule):
         else:
             self.res_conv = torch.nn.Identity()
 
-    def forward(self, x, mask, time_emb):
+    def forward(self, x: torch.Tensor, mask: torch.Tensor, time_emb: torch.Tensor):
         h = self.block1(x, mask)
         h += self.mlp(time_emb).unsqueeze(-1).unsqueeze(-1)
         h = self.block2(h, mask)
@@ -81,14 +82,14 @@ class ResnetBlock(BaseModule):
 
 
 class LinearAttention(BaseModule):
-    def __init__(self, dim, heads=4, dim_head=32):
+    def __init__(self, dim: int, heads: int = 4, dim_head: int = 32):
         super(LinearAttention, self).__init__()
         self.heads = heads
         hidden_dim = dim_head * heads
         self.to_qkv = torch.nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
         self.to_out = torch.nn.Conv2d(hidden_dim, dim, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         b, c, h, w = x.shape
         qkv = self.to_qkv(x)
         q, k, v = rearrange(
@@ -104,11 +105,11 @@ class LinearAttention(BaseModule):
 
 
 class Residual(BaseModule):
-    def __init__(self, fn):
+    def __init__(self, fn: torch.nn.Module):
         super(Residual, self).__init__()
         self.fn = fn
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         output = self.fn(x, *args, **kwargs) + x
         return output
 
@@ -196,7 +197,14 @@ class GradLogPEstimator2d(BaseModule):
         self.final_block = Block(dim, dim)
         self.final_conv = torch.nn.Conv2d(dim, 1, 1)
 
-    def forward(self, x, mask, mu, t, spk=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        t: torch.Tensor,
+        spk: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         if not isinstance(spk, type(None)):
             s = self.spk_mlp(spk)
 
@@ -241,7 +249,10 @@ class GradLogPEstimator2d(BaseModule):
         return (output * mask).squeeze(1)
 
 
-def get_noise(t, beta_init, beta_term, cumulative=False):
+# t: timestamp
+def get_noise(
+    t: torch.Tensor, beta_init: float, beta_term: float, cumulative: bool = False
+) -> torch.Tensor:
     if cumulative:
         noise = beta_init * t + 0.5 * (beta_term - beta_init) * (t**2)
     else:
@@ -252,13 +263,13 @@ def get_noise(t, beta_init, beta_term, cumulative=False):
 class Diffusion(BaseModule):
     def __init__(
         self,
-        n_feats,
-        dim,
-        n_spks=1,
-        spk_emb_dim=64,
-        beta_min=0.05,
-        beta_max=20,
-        pe_scale=1000,
+        n_feats: int,
+        dim: int,
+        n_spks: int = 1,
+        spk_emb_dim: int = 64,
+        beta_min: float = 0.05,
+        beta_max: int = 20,
+        pe_scale: int = 1000,
     ):
         super(Diffusion, self).__init__()
         self.n_feats = n_feats
@@ -273,7 +284,9 @@ class Diffusion(BaseModule):
             dim, n_spks=n_spks, spk_emb_dim=spk_emb_dim, pe_scale=pe_scale
         )
 
-    def forward_diffusion(self, x0, mask, mu, t):
+    def forward_diffusion(
+        self, x0: torch.Tensor, mask: torch.Tensor, mu: torch.Tensor, t: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         time = t.unsqueeze(-1).unsqueeze(-1)
         cum_noise = get_noise(time, self.beta_min, self.beta_max, cumulative=True)
         mean = x0 * torch.exp(-0.5 * cum_noise) + mu * (
@@ -285,7 +298,15 @@ class Diffusion(BaseModule):
         return xt * mask, z * mask
 
     @torch.no_grad()
-    def reverse_diffusion(self, z, mask, mu, n_timesteps, stoc=False, spk=None):
+    def reverse_diffusion(
+        self,
+        z: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        n_timesteps: int,
+        stoc: bool = False,
+        spk: Optional[torch.Tensor] = None,
+    ):
         h = 1.0 / n_timesteps
         xt = z * mask
         for i in range(n_timesteps):
@@ -309,10 +330,25 @@ class Diffusion(BaseModule):
         return xt
 
     @torch.no_grad()
-    def forward(self, z, mask, mu, n_timesteps, stoc=False, spk=None):
+    def forward(
+        self,
+        z: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        n_timesteps: int,
+        stoc: bool = False,
+        spk: Optional[torch.Tensor] = None,
+    ):
         return self.reverse_diffusion(z, mask, mu, n_timesteps, stoc, spk)
 
-    def loss_t(self, x0, mask, mu, t, spk=None):
+    def loss_t(
+        self,
+        x0: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        t: torch.Tensor,
+        spk: Optional[torch.Tensor] = None,
+    ):
         xt, z = self.forward_diffusion(x0, mask, mu, t)
         time = t.unsqueeze(-1).unsqueeze(-1)
         cum_noise = get_noise(time, self.beta_min, self.beta_max, cumulative=True)

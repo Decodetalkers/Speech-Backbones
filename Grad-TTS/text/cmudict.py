@@ -1,5 +1,10 @@
 """from https://github.com/keithito/tacotron"""
 
+from io import TextIOWrapper
+import os
+
+from typing import Optional, List, Dict, Union, BinaryIO
+
 import re
 
 
@@ -94,7 +99,9 @@ _valid_symbol_set = set(valid_symbols)
 
 
 class CMUDict:
-    def __init__(self, file_or_path, keep_ambiguous=True):
+    def __init__(
+        self, file_or_path: Union[str, List[str], TextIOWrapper], keep_ambiguous=True
+    ):
         if isinstance(file_or_path, str):
             with open(file_or_path, encoding="latin-1") as f:
                 entries = _parse_cmudict(f)
@@ -107,14 +114,14 @@ class CMUDict:
     def __len__(self):
         return len(self._entries)
 
-    def lookup(self, word):
+    def lookup(self, word: str) -> Optional[List[str]]:
         return self._entries.get(word.upper())
 
 
 _alt_re = re.compile(r"\([0-9]+\)")
 
 
-def _parse_cmudict(file):
+def _parse_cmudict(file: Union[TextIOWrapper, List[str]]) -> Dict[str, List[str]]:
     cmudict = {}
     for line in file:
         if len(line) and (line[0] >= "A" and line[0] <= "Z" or line[0] == "'"):
@@ -129,7 +136,7 @@ def _parse_cmudict(file):
     return cmudict
 
 
-def _get_pronunciation(s):
+def _get_pronunciation(s: str) -> Optional[str]:
     parts = s.strip().split(" ")
     for part in parts:
         if part not in _valid_symbol_set:

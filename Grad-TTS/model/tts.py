@@ -84,14 +84,14 @@ class GradTTS(BaseModule):
     @torch.no_grad()
     def forward(
         self,
-        x,
-        x_lengths,
-        n_timesteps,
-        temperature=1.0,
-        stoc=False,
-        spk=None,
-        length_scale=1.0,
-    ):
+        x: torch.Tensor,
+        x_lengths: torch.Tensor,
+        n_timesteps: int,
+        temperature: float = 1.0,
+        stoc: bool = False,
+        spk: Optional[torch.Tensor] = None,
+        length_scale: float = 1.0,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Generates mel-spectrogram from text. Returns:
             1. encoder outputs
@@ -147,8 +147,8 @@ class GradTTS(BaseModule):
         x_lengths: torch.Tensor,
         y: torch.Tensor,
         y_lengths: torch.Tensor,
-        spk: Optional[torch.Tensor]=None,
-        out_size: Optional[int]=None,
+        spk: Optional[torch.Tensor] = None,
+        out_size: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Computes 3 losses:
