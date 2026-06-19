@@ -10,7 +10,6 @@ import argparse
 import json
 import datetime as dt
 import numpy as np
-from scipy.io.wavfile import write
 
 import torch
 
@@ -23,7 +22,6 @@ from utils import intersperse
 import sys
 import torchaudio
 from speechbrain.inference.vocoders import HIFIGAN
-from speechbrain.lobes.models.FastSpeech2 import mel_spectogram
 
 # Load a pretrained HIFIGAN Vocoder
 hifi_gan = HIFIGAN.from_hparams(

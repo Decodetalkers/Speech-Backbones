@@ -19,7 +19,7 @@ from text.symbols import symbols
 from utils import parse_filelist, intersperse
 from model.utils import fix_len_compatibility
 from params import seed as random_seed
-from hifi_gan.meldataset import mel_spectrogram
+from utils import mel_spectrogram
 
 
 class TextMelDataset(torch.utils.data.Dataset):

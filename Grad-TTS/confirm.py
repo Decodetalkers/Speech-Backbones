@@ -22,6 +22,7 @@ from model import GradTTS
 from data import TextMelDataset, TextMelBatchCollate
 from utils import plot_tensor, save_plot
 from text.symbols import symbols
+
 train_filelist_path = params.train_filelist_path
 valid_filelist_path = params.valid_filelist_path
 cmudict_path = params.cmudict_path
@@ -82,4 +83,3 @@ if __name__ == "__main__":
         audio = hifi_gan.decode_batch(mel.cpu())
 
         torchaudio.save(f"out_test/sample_{i}.wav", audio.cpu(), 22050)
-

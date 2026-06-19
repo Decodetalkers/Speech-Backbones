@@ -66,7 +66,7 @@ def mel_spectrogram(
     f_min: float,
     f_max: Optional[float],
 ) -> torch.Tensor:
-    spec,_ = mel_spectogram(
+    spec, _ = mel_spectogram(
         audio=y.squeeze(),
         sample_rate=sample_rate,
         n_fft=n_fft,
