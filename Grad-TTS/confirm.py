@@ -1,10 +1,4 @@
-import json
-from hifi_gan.env import AttrDict
-
-from hifi_gan.env import AttrDict
-from hifi_gan.models import Generator as HiFiGAN
-from scipy.io.wavfile import write
-
+import os
 import torchaudio
 from speechbrain.inference.vocoders import HIFIGAN
 from speechbrain.lobes.models.FastSpeech2 import mel_spectogram
@@ -79,11 +73,13 @@ if __name__ == "__main__":
         f_min,
         f_max,
     )
+    os.makedirs("out_test", exist_ok=True)
+
     test_batch = train_dataset.sample_test_batch(size=4)
 
     for i, item in enumerate(test_batch):
         mel = item["y"]
         audio = hifi_gan.decode_batch(mel.cpu())
 
-        torchaudio.save("waveform_reconstructed.wav", audio.cpu(), 22050)
+        torchaudio.save(f"out_test/sample_{i}.wav", audio.cpu(), 22050)
 
