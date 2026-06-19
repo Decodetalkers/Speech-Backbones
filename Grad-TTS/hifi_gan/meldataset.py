@@ -65,7 +65,6 @@ def mel_spectrogram(
     win_length: int,
     f_min: float,
     f_max: Optional[float],
-    center: bool = False,
 ) -> torch.Tensor:
     spec,_ = mel_spectogram(
         audio=y.squeeze(),
@@ -188,7 +187,6 @@ class MelDataset(torch.utils.data.Dataset):
                 self.win_length,
                 self.fmin,
                 self.fmax,
-                center=False,
             )
         else:
             mel = np.load(
@@ -230,7 +228,6 @@ class MelDataset(torch.utils.data.Dataset):
             self.win_length,
             self.fmin,
             self.fmax_loss,
-            center=False,
         )
 
         return mel.squeeze(), audio.squeeze(0), filename, mel_loss.squeeze()

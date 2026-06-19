@@ -69,7 +69,6 @@ class TextMelDataset(torch.utils.data.Dataset):
             self.win_length,
             self.f_min,
             self.f_max,
-            center=False,
         ).squeeze()
         return mel
 
@@ -175,7 +174,6 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
             self.win_length,
             self.f_min,
             self.f_max,
-            center=False,
         ).squeeze()
         return mel
 
