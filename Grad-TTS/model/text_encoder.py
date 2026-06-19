@@ -433,6 +433,8 @@ class TextEncoder(BaseModule):
             p_dropout,
         )
 
+    # x: [batch_size, len]
+    # x_lengths: [batch_size]
     def forward(
         self,
         x: torch.Tensor,

@@ -14,6 +14,8 @@ from librosa.util import normalize
 from scipy.io.wavfile import read
 from librosa.filters import mel as librosa_mel_fn
 
+from speechbrain.lobes.models.FastSpeech2 import mel_spectogram
+
 MAX_WAV_VALUE = 32768.0
 
 
@@ -65,29 +67,8 @@ def mel_spectrogram(
     f_max: Optional[float],
     center: bool = False,
 ) -> torch.Tensor:
-
-    if torch.min(y) < -1.0:
-        print("min value is ", torch.min(y))
-    if torch.max(y) > 1.0:
-        print("max value is ", torch.max(y))
-
-    global mel_basis, hann_window
-    if f_max not in mel_basis:
-        mel = librosa_mel_fn(
-            sr=sample_rate, n_fft=n_fft, n_mels=n_mels, fmin=f_min, fmax=f_max
-        )
-        mel_basis[str(f_max) + "_" + str(y.device)] = (
-            torch.from_numpy(mel).float().to(y.device)
-        )
-        hann_window[str(y.device)] = torch.hann_window(win_length).to(y.device)
-
-    y = torch.nn.functional.pad(
-        y.unsqueeze(1),
-        (int((n_fft - hop_length) / 2), int((n_fft - hop_length) / 2)),
-        mode="reflect",
-    )
-    y = y.squeeze(1)
-    transform = torchaudio.transforms.MelSpectrogram(
+    spec,_ = mel_spectogram(
+        audio=y.squeeze(),
         sample_rate=sample_rate,
         n_fft=n_fft,
         n_mels=n_mels,
@@ -95,9 +76,13 @@ def mel_spectrogram(
         win_length=win_length,
         f_min=f_min,
         f_max=f_max,
-        center=center,
+        power=1,
+        normalized=False,
+        min_max_energy_norm=True,
+        norm="slaney",
+        mel_scale="slaney",
+        compression=True,
     )
-    spec = transform(y)
     return spec
 
 

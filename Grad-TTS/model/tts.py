@@ -121,6 +121,7 @@ class GradTTS(BaseModule):
         w_ceil = torch.ceil(w) * length_scale
         y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
         y_max_length = int(y_lengths.max())
+        y_max_length =  y_max_length if y_max_length > 0 else 0
         y_max_length_ = fix_len_compatibility(y_max_length)
 
         # Using obtained durations `w` construct alignment map `attn`

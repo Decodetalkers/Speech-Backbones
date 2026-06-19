@@ -2,3 +2,4 @@ __pycache__
 /logs
 /DUMMY
 /checkpts/hifigan.pt
+/pretrained_models

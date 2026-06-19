@@ -266,9 +266,9 @@ class Diffusion(BaseModule):
         n_feats: int,
         dim: int,
         n_spks: int = 1,
-        spk_emb_dim: int = 64,
+        spk_emb_dim: Optional[int] = 64,
         beta_min: float = 0.05,
-        beta_max: int = 20,
+        beta_max: int | float = 20,
         pe_scale: int = 1000,
     ):
         super(Diffusion, self).__init__()

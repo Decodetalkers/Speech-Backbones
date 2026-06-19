@@ -21,13 +21,16 @@ from text.symbols import symbols
 from utils import intersperse
 
 import sys
+import torchaudio
+from speechbrain.inference.vocoders import HIFIGAN
+from speechbrain.lobes.models.FastSpeech2 import mel_spectogram
 
-from hifi_gan.env import AttrDict
-from hifi_gan.models import Generator as HiFiGAN
-
-
-HIFIGAN_CONFIG = "./checkpts/hifigan-config.json"
-HIFIGAN_CHECKPT = "./checkpts/hifigan.pt"
+# Load a pretrained HIFIGAN Vocoder
+hifi_gan = HIFIGAN.from_hparams(
+    source="speechbrain/tts-hifigan-ljspeech",
+    savedir="pretrained_models/tts-hifigan-ljspeech",
+    run_opts={"device": "cuda:0"},
+)
 
 
 if __name__ == "__main__":
@@ -97,16 +100,6 @@ if __name__ == "__main__":
     _ = generator.cuda().eval()
     print(f"Number of parameters: {generator.nparams}")
 
-    print("Initializing HiFi-GAN...")
-    with open(HIFIGAN_CONFIG) as f:
-        h = AttrDict(json.load(f))
-    vocoder = HiFiGAN(h)
-    vocoder.load_state_dict(
-        torch.load(HIFIGAN_CHECKPT, map_location=lambda loc, storage: loc)["generator"]
-    )
-    _ = vocoder.cuda().eval()
-    vocoder.remove_weight_norm()
-
     with open(args.file, "r", encoding="utf-8") as f:
         texts = [line.strip() for line in f.readlines()]
     cmu = cmudict.CMUDict("./resources/cmu_dictionary")
@@ -132,10 +125,8 @@ if __name__ == "__main__":
             t = (dt.datetime.now() - t).total_seconds()
             print(f"Grad-TTS RTF: {t * 22050 / (y_dec.shape[-1] * 256)}")
 
-            audio = (
-                vocoder.forward(y_dec).cpu().squeeze().clamp(-1, 1).numpy() * 32768
-            ).astype(np.int16)
+            audio = hifi_gan.decode_batch(y_dec.squeeze().cpu())
 
-            write(f"./out/sample_{i}.wav", 22050, audio)
+            torchaudio.save(f"./out/sample_{i}.wav", audio.cpu(), 22050)
 
     print("Done. Check out `out` folder for samples.")

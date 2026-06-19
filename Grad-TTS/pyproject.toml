@@ -13,10 +13,16 @@ dependencies = [
     "monotonic-alignment-search[cuda]>=0.2.1",
     "numpy>=2.4.6",
     "scipy>=1.17.1",
+    "speechbrain>=1.1.0",
     "tensorboard>=2.20.0",
     "torch>=2.12.0",
     "torchaudio>=2.11.0",
     "torchcodec>=0.14.0",
     "tqdm>=4.68.2",
     "unidecode>=1.4.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipython>=9.14.1",
 ]

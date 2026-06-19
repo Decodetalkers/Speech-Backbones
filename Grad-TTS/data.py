@@ -99,6 +99,10 @@ class TextMelDataset(torch.utils.data.Dataset):
 
 
 class TextMelBatchCollate(object):
+    # x: text
+    # x_lengths: length of the text
+    # y: mel_spectrogram
+    # y_lengths: the time of mel_spectrogram
     def __call__(self, batch):
         B = len(batch)
         y_max_length = max([item["y"].shape[-1] for item in batch])
