@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import torch
 
 
-def intersperse(lst, item):
+def intersperse(lst: List[int], item: int) -> List[int]:
     # Adds blank symbol
     result = [item] * (len(lst) * 2 + 1)
     result[1::2] = lst
@@ -28,14 +28,14 @@ def parse_filelist(filelist_path: str, split_char: str = "|") -> List[List[str]]
     return filepaths_and_text
 
 
-def latest_checkpoint_path(dir_path, regex="grad_*.pt"):
+def latest_checkpoint_path(dir_path: str, regex: str = "grad_*.pt"):
     f_list = glob.glob(os.path.join(dir_path, regex))
     f_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))
     x = f_list[-1]
     return x
 
 
-def load_checkpoint(logdir, model, num=None):
+def load_checkpoint(logdir: str, model: torch.nn.Module, num: Optional[int] = None):
     if num is None:
         model_path = latest_checkpoint_path(logdir, regex="grad_*.pt")
     else:
@@ -61,7 +61,7 @@ def save_figure_to_numpy(fig: plt.Figure):
     return img
 
 
-def plot_tensor(tensor):
+def plot_tensor(tensor: torch.Tensor):
     plt.style.use("default")
     fig, ax = plt.subplots(figsize=(12, 3))
     im = ax.imshow(tensor, aspect="auto", origin="lower", interpolation="none")
@@ -73,7 +73,7 @@ def plot_tensor(tensor):
     return data
 
 
-def save_plot(tensor, savepath):
+def save_plot(tensor: torch.Tensor, savepath: str):
     plt.style.use("default")
     fig, ax = plt.subplots(figsize=(12, 3))
     im = ax.imshow(tensor, aspect="auto", origin="lower", interpolation="none")

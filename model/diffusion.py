@@ -115,11 +115,11 @@ class Residual(BaseModule):
 
 
 class SinusoidalPosEmb(BaseModule):
-    def __init__(self, dim):
+    def __init__(self, dim: int):
         super(SinusoidalPosEmb, self).__init__()
         self.dim = dim
 
-    def forward(self, x, scale=1000):
+    def forward(self, x: torch.Tensor, scale: int = 1000):
         device = x.device
         half_dim = self.dim // 2
         emb = math.log(10000) / (half_dim - 1)
@@ -132,13 +132,13 @@ class SinusoidalPosEmb(BaseModule):
 class GradLogPEstimator2d(BaseModule):
     def __init__(
         self,
-        dim,
-        dim_mults=(1, 2, 4),
-        groups=8,
+        dim: int,
+        dim_mults: Tuple[int, int, int] = (1, 2, 4),
+        groups: int = 8,
         n_spks=None,
-        spk_emb_dim=64,
-        n_feats=80,
-        pe_scale=1000,
+        spk_emb_dim: int = 64,
+        n_feats: int = 80,
+        pe_scale: int = 1000,
     ):
         super(GradLogPEstimator2d, self).__init__()
         self.dim = dim
@@ -275,13 +275,13 @@ class Diffusion(BaseModule):
         self.n_feats = n_feats
         self.dim = dim
         self.n_spks = n_spks
-        self.spk_emb_dim = spk_emb_dim
+        self.spk_emb_dim = spk_emb_dim if spk_emb_dim is not None else 64
         self.beta_min = beta_min
         self.beta_max = beta_max
         self.pe_scale = pe_scale
 
         self.estimator = GradLogPEstimator2d(
-            dim, n_spks=n_spks, spk_emb_dim=spk_emb_dim, pe_scale=pe_scale
+            dim, n_spks=n_spks, spk_emb_dim=self.spk_emb_dim, pe_scale=pe_scale
         )
 
     def forward_diffusion(

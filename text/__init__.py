@@ -13,7 +13,7 @@ _id_to_symbol = {i: s for i, s in enumerate(symbols)}
 _curly_re = re.compile(r"(.*?)\{(.+?)\}(.*)")
 
 
-def get_arpabet(word, dictionary: cmudict.CMUDict):
+def get_arpabet(word: str, dictionary: cmudict.CMUDict) -> str:
     word_arpabet = dictionary.lookup(word)
     if word_arpabet is not None:
         return "{" + word_arpabet[0] + "}"
