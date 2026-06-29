@@ -20,7 +20,7 @@ class Mish(BaseModule):
 
 
 class Upsample(BaseModule):
-    def __init__(self, dim):
+    def __init__(self, dim: int):
         super(Upsample, self).__init__()
         self.conv = torch.nn.ConvTranspose2d(dim, dim, 4, 2, 1)
 

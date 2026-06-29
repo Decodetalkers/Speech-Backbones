@@ -53,7 +53,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         self, filepath_and_text: List[str]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         filepath, text = filepath_and_text[0], filepath_and_text[1]
-        text = self.get_text(text, add_blank=self.add_blank)
+        text = self.get_text(text)
         mel = self.get_mel(filepath)
         return (text, mel)
 
@@ -72,7 +72,7 @@ class TextMelDataset(torch.utils.data.Dataset):
         ).squeeze()
         return mel
 
-    def get_text(self, text: str, add_blank: bool = True) -> torch.Tensor:
+    def get_text(self, text: str) -> torch.Tensor:
         text_norm = text_to_sequence(text, dictionary=self.cmudict)
         if self.add_blank:
             text_norm = intersperse(
@@ -157,7 +157,7 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
         self, line: List[str]
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         filepath, text, speaker = line[0], line[1], line[2]
-        text = self.get_text(text, add_blank=self.add_blank)
+        text = self.get_text(text)
         mel = self.get_mel(filepath)
         speaker = self.get_speaker(speaker)
         return (text, mel, speaker)
@@ -177,7 +177,7 @@ class TextMelSpeakerDataset(torch.utils.data.Dataset):
         ).squeeze()
         return mel
 
-    def get_text(self, text: str, add_blank: bool = True) -> torch.Tensor:
+    def get_text(self, text: str) -> torch.Tensor:
         text_norm = text_to_sequence(text, dictionary=self.cmudict)
         if self.add_blank:
             text_norm = intersperse(
