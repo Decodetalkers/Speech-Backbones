@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 
 import torch
 
+EMO_FEATURES = 5
+
 
 def intersperse(lst: List[int], item: int) -> List[int]:
     # Adds blank symbol
