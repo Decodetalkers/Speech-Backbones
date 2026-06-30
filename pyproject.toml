@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib>=3.11.0",
     "monotonic-alignment-search[cuda]>=0.2.1",
     "numpy>=2.4.6",
+    "pandas>=3.0.3",
     "scipy>=1.17.1",
     "speechbrain>=1.1.0",
     "tensorboard>=2.20.0",
