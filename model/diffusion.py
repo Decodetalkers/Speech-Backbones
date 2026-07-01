@@ -6,7 +6,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import math
 import torch
 from einops import rearrange
@@ -29,7 +29,7 @@ class Upsample(BaseModule):
 
 
 class Downsample(BaseModule):
-    def __init__(self, dim):
+    def __init__(self, dim: int):
         super(Downsample, self).__init__()
         self.conv = torch.nn.Conv2d(dim, dim, 3, 2, 1)
 
@@ -109,7 +109,7 @@ class Residual(BaseModule):
         super(Residual, self).__init__()
         self.fn = fn
 
-    def forward(self, x: torch.Tensor, *args, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         output = self.fn(x, *args, **kwargs) + x
         return output
 
@@ -119,7 +119,7 @@ class SinusoidalPosEmb(BaseModule):
         super(SinusoidalPosEmb, self).__init__()
         self.dim = dim
 
-    def forward(self, x: torch.Tensor, scale: int = 1000):
+    def forward(self, x: torch.Tensor, scale: int = 1000) -> torch.Tensor:
         device = x.device
         half_dim = self.dim // 2
         emb = math.log(10000) / (half_dim - 1)
@@ -128,14 +128,14 @@ class SinusoidalPosEmb(BaseModule):
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 
-
+# In fact, it is unet(Like)
 class GradLogPEstimator2d(BaseModule):
     def __init__(
         self,
         dim: int,
-        dim_mults: Tuple[int, int, int] = (1, 2, 4),
+        dim_mults: List[int] = [1, 2, 4],
         groups: int = 8,
-        n_spks=None,
+        n_spks: Optional[int]=None,
         spk_emb_dim: int = 64,
         n_feats: int = 80,
         pe_scale: int = 1000,
@@ -148,7 +148,7 @@ class GradLogPEstimator2d(BaseModule):
         self.spk_emb_dim = spk_emb_dim
         self.pe_scale = pe_scale
 
-        if n_spks > 1:  # ty:ignore[unsupported-operator]
+        if n_spks is not None and n_spks > 1:
             self.spk_mlp = torch.nn.Sequential(
                 torch.nn.Linear(spk_emb_dim, spk_emb_dim * 4),
                 Mish(),
@@ -249,7 +249,7 @@ class GradLogPEstimator2d(BaseModule):
         return (output * mask).squeeze(1)
 
 
-# t: timestamp
+# t: timestamp ??
 def get_noise(
     t: torch.Tensor, beta_init: float, beta_term: float, cumulative: bool = False
 ) -> torch.Tensor:
@@ -284,6 +284,8 @@ class Diffusion(BaseModule):
             dim, n_spks=n_spks, spk_emb_dim=self.spk_emb_dim, pe_scale=pe_scale
         )
 
+    # NOTE: I should know how the time is like
+    # And maybe I should get the time in every stage?
     def forward_diffusion(
         self, x0: torch.Tensor, mask: torch.Tensor, mu: torch.Tensor, t: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -306,7 +308,7 @@ class Diffusion(BaseModule):
         n_timesteps: int,
         stoc: bool = False,
         spk: Optional[torch.Tensor] = None,
-    ):
+    ) -> torch.Tensor:
         h = 1.0 / n_timesteps
         xt = z * mask
         for i in range(n_timesteps):
@@ -338,7 +340,7 @@ class Diffusion(BaseModule):
         n_timesteps: int,
         stoc: bool = False,
         spk: Optional[torch.Tensor] = None,
-    ):
+    ) -> torch.Tensor:
         return self.reverse_diffusion(z, mask, mu, n_timesteps, stoc, spk)
 
     def loss_t(
@@ -348,7 +350,7 @@ class Diffusion(BaseModule):
         mu: torch.Tensor,
         t: torch.Tensor,
         spk: Optional[torch.Tensor] = None,
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         xt, z = self.forward_diffusion(x0, mask, mu, t)
         time = t.unsqueeze(-1).unsqueeze(-1)
         cum_noise = get_noise(time, self.beta_min, self.beta_max, cumulative=True)
@@ -357,7 +359,15 @@ class Diffusion(BaseModule):
         loss = torch.sum((noise_estimation + z) ** 2) / (torch.sum(mask) * self.n_feats)
         return loss, xt
 
-    def compute_loss(self, x0, mask, mu, spk=None, offset=1e-5):
+    # NOTE: modify it
+    def compute_loss(
+        self,
+        x0: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        spk: Optional[torch.Tensor] = None,
+        offset: float = 1e-5,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         t = torch.rand(
             x0.shape[0], dtype=x0.dtype, device=x0.device, requires_grad=False
         )

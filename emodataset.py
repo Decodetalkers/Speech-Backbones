@@ -7,6 +7,7 @@ from typing import Tuple, List, Dict
 from text import text_to_sequence, cmudict
 from text.symbols import symbols
 from utils import parse_filelist, intersperse
+import numpy as np
 
 # TODO: tran dataset and valid dataset
 _THIS_DIR = Path(__file__).parent.resolve()
@@ -115,7 +116,12 @@ class EmoDataset(torch.utils.data.Dataset):
                 emo_data = torch.tensor([1, 0, 0, 0, 0])
         text_data = self.get_text(text)
         return emo_data, mel_data, text_data
-
+    def sample_test_batch(self, size: int) -> List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+        idx = np.random.choice(range(len(self)), size=size, replace=False)
+        test_batch = []
+        for index in idx:
+            test_batch.append(self.__getitem__(index))
+        return test_batch
 
 class EmoBatchCollate(object):
     def __init__(self, min_div: int, emo_features: int, n_mels: int):
@@ -141,7 +147,7 @@ class EmoBatchCollate(object):
         mel_data = torch.zeros(
             (batch_len, self.n_mels, mel_max_len), dtype=torch.float32
         )
-        text_data = torch.zeros((batch_len, text_max_len), dtype=torch.float32)
+        text_data = torch.zeros((batch_len, text_max_len), dtype=torch.long)
 
         for i, item in enumerate(batch):
             emo, mel, text = item
@@ -179,6 +185,8 @@ if __name__ == "__main__":
     for data in loader:
         print(f"emo_label: {data['emo_label']}")
         print(f"mel_lengths: {data['mel_lengths']}")
+        print(f"mel size: {data['mel'].shape}")
+        print(f"text size: {data['text'].shape}")
         count += 1
         if count >= 3:
             break

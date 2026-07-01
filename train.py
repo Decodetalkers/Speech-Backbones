@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 import params
 from model import GradTTS
 from data import TextMelDataset, TextMelBatchCollate
+from emodataset import EmoDataset, EmoBatchCollate, EmoDB
 from utils import plot_tensor, save_plot
 from text.symbols import symbols
 
@@ -64,39 +65,27 @@ if __name__ == "__main__":
     logger = SummaryWriter(log_dir=log_dir)
 
     print("Initializing data loaders...")
-    train_dataset = TextMelDataset(
-        train_filelist_path,
-        cmudict_path,
-        add_blank,
-        n_fft,
-        n_feats,
-        sample_rate,
-        hop_length,
-        win_length,
-        f_min,
-        f_max,
+
+    dataset = EmoDataset(EmoDB,cmudict_path, add_blank, n_fft=n_fft, n_mels=n_feats, hop_length=hop_length, win_length=win_length, f_min=f_min, f_max=f_max)
+    batch_collate = EmoBatchCollate(
+        dataset.min_div, dataset.emo_features, dataset.mels_count
     )
-    batch_collate = TextMelBatchCollate()
-    loader = DataLoader(
+
+    train_dataset, test = torch.utils.data.random_split(dataset, [0.8, 0.2])
+
+    train_loader = DataLoader(
         dataset=train_dataset,
-        batch_size=batch_size,
+        shuffle=True,
+        batch_size=params.batch_size,
         collate_fn=batch_collate,
-        drop_last=True,
-        num_workers=4,
-        shuffle=False,
     )
-    test_dataset = TextMelDataset(
-        valid_filelist_path,
-        cmudict_path,
-        add_blank,
-        n_fft,
-        n_feats,
-        sample_rate,
-        hop_length,
-        win_length,
-        f_min,
-        f_max,
+    test_loader = DataLoader(
+        dataset=test,
+        shuffle=True,
+        batch_size=params.batch_size,
+        collate_fn=batch_collate,
     )
+
 
     print("Initializing model...")
     model = GradTTS(
@@ -128,9 +117,10 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
 
     print("Logging test batch...")
-    test_batch = test_dataset.sample_test_batch(size=params.test_size)
+
+    test_batch = dataset.sample_test_batch(size=params.test_size)
     for i, item in enumerate(test_batch):
-        mel = item["y"]
+        mel = item[1]
         logger.add_image(
             f"image_{i}/ground_truth",
             plot_tensor(mel.squeeze()),
@@ -146,11 +136,11 @@ if __name__ == "__main__":
         dur_losses = []
         prior_losses = []
         diff_losses = []
-        with tqdm(loader, total=len(train_dataset) // batch_size) as progress_bar:
+        with tqdm(train_loader, total=len(train_dataset) // batch_size) as progress_bar:
             for batch_idx, batch in enumerate(progress_bar):
                 model.zero_grad()
-                x, x_lengths = batch["x"].cuda(), batch["x_lengths"].cuda()
-                y, y_lengths = batch["y"].cuda(), batch["y_lengths"].cuda()
+                x, x_lengths = batch["text"].cuda(), batch["text_lengths"].cuda()
+                y, y_lengths = batch["mel"].cuda(), batch["mel_lengths"].cuda()
                 dur_loss, prior_loss, diff_loss = model.compute_loss(
                     x, x_lengths, y, y_lengths, out_size=out_size
                 )
@@ -204,7 +194,7 @@ if __name__ == "__main__":
         print("Synthesis...")
         with torch.no_grad():
             for i, item in enumerate(test_batch):
-                x = item["x"].to(torch.long).unsqueeze(0).cuda()
+                x = item[0].to(torch.long).unsqueeze(0).cuda()
                 x_lengths = torch.LongTensor([x.shape[-1]]).cuda()
                 y_enc, y_dec, attn = model(x, x_lengths, n_timesteps=50)
                 logger.add_image(
