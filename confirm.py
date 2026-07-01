@@ -19,7 +19,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 import params
 from model import GradTTS
-from data import TextMelDataset, TextMelBatchCollate
+
+from emodataset import EmoDataset, EmoBatchCollate, EmoDB
 from utils import plot_tensor, save_plot
 from text.symbols import symbols
 
@@ -62,24 +63,23 @@ pe_scale = params.pe_scale
 if __name__ == "__main__":
     print("Initializing data loaders...")
 
-    train_dataset = TextMelDataset(
-        train_filelist_path,
+    train_dataset = EmoDataset(
+        EmoDB,
         cmudict_path,
         add_blank,
-        n_fft,
-        n_feats,
-        sample_rate,
-        hop_length,
-        win_length,
-        f_min,
-        f_max,
+        n_fft=n_fft,
+        n_mels=n_feats,
+        hop_length=hop_length,
+        win_length=win_length,
+        f_min=f_min,
+        f_max=f_max,
     )
     os.makedirs("out_test", exist_ok=True)
 
     test_batch = train_dataset.sample_test_batch(size=4)
 
     for i, item in enumerate(test_batch):
-        mel = item["y"]
+        mel = item[1]
         audio = hifi_gan.decode_batch(mel.cpu())
 
         torchaudio.save(f"out_test/sample_{i}.wav", audio.cpu(), 22050)

@@ -6,12 +6,15 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # MIT License for more details.
 
+from emodataset import max_2_div
+from utils import EMO_FEATURES
 from typing import Optional, Tuple, List
 import math
 import torch
 from einops import rearrange
 
 from model.base import BaseModule
+from .unet import Unet
 
 
 class Mish(BaseModule):
@@ -128,6 +131,64 @@ class SinusoidalPosEmb(BaseModule):
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 
+
+# this module will train a random shape data to 4 grade
+# flat the n * m data and add embedding
+class EmoClassify(torch.nn.Module):
+    convs: List[torch.nn.Module]
+
+    def __init__(
+        self,
+        n_mels: int,
+        out_features: int,
+        hidden_dim: int = 1024,
+        num_layers: int = 1,
+        time_embedding_dim: int = 256,
+        dropout: float = 0.1,
+        tau: float = 0.01,
+    ):
+        super(EmoClassify, self).__init__()
+
+        self.tau = tau
+        self.unet = Unet(time_embedding_dim, in_channels=1, out_channels=1)
+
+        self.lstm = torch.nn.LSTM(
+            n_mels,
+            hidden_dim,
+            num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0,
+        )
+
+        self.linear = torch.nn.Linear(hidden_dim, out_features)
+        self.softmax = torch.nn.Softmax(dim=-1)
+
+    def forward(
+        self, x_0: torch.Tensor, timestamp: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        x_0 = x_0.unsqueeze(dim=1)
+        x_0 = self.unet(x_0, timestamp)
+        x_0 = x_0.squeeze()
+        x_0 = x_0.transpose(-1, -2)
+        x_0, (_hidden, _cell) = self.lstm(x_0)
+        x_0 = self.linear(x_0)
+        x_0 = x_0.mean(dim=-2)
+        x_0 = self.softmax(x_0)
+
+        return x_0
+
+    def train_label(
+        self, x_0: torch.Tensor, timestamp: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        this part make the biggest label stronger, in order to predict the right label
+        Only used in training process
+        """
+        x_0 = self.forward(x_0, timestamp)
+        x_0 = self.softmax(x_0 / self.tau)
+        return x_0
+
+
 # In fact, it is unet(Like)
 class GradLogPEstimator2d(BaseModule):
     def __init__(
@@ -135,7 +196,7 @@ class GradLogPEstimator2d(BaseModule):
         dim: int,
         dim_mults: List[int] = [1, 2, 4],
         groups: int = 8,
-        n_spks: Optional[int]=None,
+        n_spks: Optional[int] = None,
         spk_emb_dim: int = 64,
         n_feats: int = 80,
         pe_scale: int = 1000,
@@ -270,6 +331,7 @@ class Diffusion(BaseModule):
         beta_min: float = 0.05,
         beta_max: int | float = 20,
         pe_scale: int = 1000,
+        time_embedding_dim: int = 128,
     ):
         super(Diffusion, self).__init__()
         self.n_feats = n_feats
@@ -283,6 +345,11 @@ class Diffusion(BaseModule):
         self.estimator = GradLogPEstimator2d(
             dim, n_spks=n_spks, spk_emb_dim=self.spk_emb_dim, pe_scale=pe_scale
         )
+        self.emo_estimtor = EmoClassify(
+            n_feats, EMO_FEATURES, time_embedding_dim=time_embedding_dim
+        )
+        self.mel_div = max_2_div(n_feats)
+        self.emo_loss = torch.nn.CrossEntropyLoss()
 
     # NOTE: I should know how the time is like
     # And maybe I should get the time in every stage?
@@ -299,7 +366,8 @@ class Diffusion(BaseModule):
         xt = mean + z * torch.sqrt(variance)
         return xt * mask, z * mask
 
-    @torch.no_grad()
+    # FIXME: I need it do not grade, but I need the grad
+    @torch.no_grad
     def reverse_diffusion(
         self,
         z: torch.Tensor,
@@ -308,6 +376,8 @@ class Diffusion(BaseModule):
         n_timesteps: int,
         stoc: bool = False,
         spk: Optional[torch.Tensor] = None,
+        emo: Optional[int] = None,
+        emo_hydrid: Optional[float] = None,
     ) -> torch.Tensor:
         h = 1.0 / n_timesteps
         xt = z * mask
@@ -315,10 +385,37 @@ class Diffusion(BaseModule):
             t = (1.0 - (i + 0.5) * h) * torch.ones(
                 z.shape[0], dtype=z.dtype, device=z.device
             )
+            emo_noise = torch.zeros(z.shape, device=z.device)
+            if emo is not None and emo_hydrid is not None:
+                mel_max_len = xt.shape[-1]
+                for _ in range(self.mel_div):
+                    if mel_max_len % self.mel_div == 0:
+                        break
+                    mel_max_len += 1
+                    xt_copy = torch.zeros(
+                        (xt.shape[0], xt.shape[1], mel_max_len),
+                        dtype=torch.float32,
+                        device=xt.device,
+                    )
+                    xt_copy[:, :, : xt.shape[-1]] = xt
+                grad = torch.autograd.functional.jacobian(self.emo_estimtor, (xt_copy, t))
+                target = self.emo_estimtor.forward(xt_copy, t)
+                print(grad)
+                grad = torch.autograd.grad(
+                    target.sum(),
+                    xt_copy,
+                )[0]
+                print(grad.shape)
+                emo_now = torch.zeros(5)
+                emo_now[0] = 1.0 - emo_hydrid
+                emo_now[emo] = emo_hydrid
+                emo_noise = grad * emo_now
             time = t.unsqueeze(-1).unsqueeze(-1)
             noise_t = get_noise(time, self.beta_min, self.beta_max, cumulative=False)
             if stoc:  # adds stochastic term
-                dxt_det = 0.5 * (mu - xt) - self.estimator(xt, mask, mu, t, spk)
+                dxt_det = (
+                    0.5 * (mu - xt) - self.estimator(xt, mask, mu, t, spk) - emo_noise
+                )
                 dxt_det = dxt_det * noise_t * h
                 dxt_stoc = torch.randn(
                     z.shape, dtype=z.dtype, device=z.device, requires_grad=False
@@ -326,12 +423,11 @@ class Diffusion(BaseModule):
                 dxt_stoc = dxt_stoc * torch.sqrt(noise_t * h)
                 dxt = dxt_det + dxt_stoc
             else:
-                dxt = 0.5 * (mu - xt - self.estimator(xt, mask, mu, t, spk))
+                dxt = 0.5 * (mu - xt - self.estimator(xt, mask, mu, t, spk) - emo_noise)
                 dxt = dxt * noise_t * h
             xt = (xt - dxt) * mask
         return xt
 
-    @torch.no_grad()
     def forward(
         self,
         z: torch.Tensor,
@@ -340,8 +436,12 @@ class Diffusion(BaseModule):
         n_timesteps: int,
         stoc: bool = False,
         spk: Optional[torch.Tensor] = None,
+        emo: Optional[int] = None,
+        emo_hydrid: Optional[float] = None,
     ) -> torch.Tensor:
-        return self.reverse_diffusion(z, mask, mu, n_timesteps, stoc, spk)
+        return self.reverse_diffusion(
+            z, mask, mu, n_timesteps, stoc, spk, emo, emo_hydrid
+        )
 
     def loss_t(
         self,
@@ -349,6 +449,7 @@ class Diffusion(BaseModule):
         mask: torch.Tensor,
         mu: torch.Tensor,
         t: torch.Tensor,
+        emo_label: Optional[torch.Tensor] = None,
         spk: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         xt, z = self.forward_diffusion(x0, mask, mu, t)
@@ -357,6 +458,21 @@ class Diffusion(BaseModule):
         noise_estimation = self.estimator(xt, mask, mu, t, spk)
         noise_estimation *= torch.sqrt(1.0 - torch.exp(-cum_noise))
         loss = torch.sum((noise_estimation + z) ** 2) / (torch.sum(mask) * self.n_feats)
+        # TODO: it is not a good way to let loss together
+        if emo_label is not None:
+            mel_max_len = xt.shape[-1]
+            for _ in range(self.mel_div):
+                if mel_max_len % self.mel_div == 0:
+                    break
+                mel_max_len += 1
+                xt_copy = torch.zeros(
+                    (xt.shape[0], xt.shape[1], mel_max_len),
+                    dtype=torch.float32,
+                    device=xt.device,
+                )
+                xt_copy[:, :, : xt.shape[-1]] = xt
+            label_predict = self.emo_estimtor(xt_copy, t)
+            loss += self.emo_loss(label_predict, emo_label.float())
         return loss, xt
 
     # NOTE: modify it
@@ -365,6 +481,7 @@ class Diffusion(BaseModule):
         x0: torch.Tensor,
         mask: torch.Tensor,
         mu: torch.Tensor,
+        emo_label: Optional[torch.Tensor] = None,
         spk: Optional[torch.Tensor] = None,
         offset: float = 1e-5,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -372,4 +489,4 @@ class Diffusion(BaseModule):
             x0.shape[0], dtype=x0.dtype, device=x0.device, requires_grad=False
         )
         t = torch.clamp(t, offset, 1.0 - offset)
-        return self.loss_t(x0, mask, mu, t, spk)
+        return self.loss_t(x0, mask, mu, t, emo_label, spk)

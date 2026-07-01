@@ -189,9 +189,8 @@ class Unet(nn.Module):
 
     def __init__(
         self,
-        timesteps: int,
         time_embedding_dim: int,
-        in_channels: int = 3,
+        in_channels: int = 1,
         out_channels: int = 1,
         base_dim: int = 32,  # become thicker
         dim_mults: List[int] = [2, 4, 8, 16],
@@ -204,7 +203,7 @@ class Unet(nn.Module):
 
         # it is used to make channels become base_dim
         self.init_conv = ConvBnSiLu(in_channels, base_dim, 3, 1, 1)
-        self.time_embedding = nn.Embedding(timesteps, time_embedding_dim)
+        self.time_conv = nn.Conv1d(1, time_embedding_dim, 3, padding=1, stride=1)
 
         self.encoder_blocks = nn.ModuleList(
             [EncoderBlock(c[0], c[1], time_embedding_dim) for c in channels]
@@ -227,7 +226,9 @@ class Unet(nn.Module):
     ) -> torch.Tensor:
         x = self.init_conv(x)
         if time_stamp is not None:
-            time_stamp = self.time_embedding(time_stamp)
+            time_stamp = time_stamp.unsqueeze(0)
+            time_stamp = self.time_conv(time_stamp)
+            time_stamp = time_stamp.transpose(-1, -2)
         encoder_shortcuts: List[nn.Module] = []
         for encoder_block in self.encoder_blocks:
             x, x_shortcut = encoder_block(x, time_stamp)
@@ -255,6 +256,6 @@ class Unet(nn.Module):
 if __name__ == "__main__":
     x = torch.randint(0, 100, (3, 1, 256, 224))
     t = torch.randint(0, 1000, (3,))
-    model: Unet = Unet(1000, 128, in_channels=1, out_channels=1)
+    model: Unet = Unet(128, in_channels=1, out_channels=1)
     y = model(x.float(), t)
     print(y.shape)

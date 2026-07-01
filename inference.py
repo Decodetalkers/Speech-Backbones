@@ -119,12 +119,14 @@ if __name__ == "__main__":
                 stoc=False,
                 spk=spk,
                 length_scale=0.91,
+                emo=2,
+                emo_hydrid=0.3,
             )
             t = (dt.datetime.now() - t).total_seconds()
-            print(f"Grad-TTS RTF: {t * 16000 / (y_dec.shape[-1] * 256)}")
+            print(f"Grad-TTS RTF: {t * 22050 / (y_dec.shape[-1] * 256)}")
 
             audio = hifi_gan.decode_batch(y_dec.squeeze().cpu())
 
-            torchaudio.save(f"./out/sample_{i}.wav", audio.cpu(), 16000)
+            torchaudio.save(f"./out/sample_{i}.wav", audio.cpu(), 22050)
 
     print("Done. Check out `out` folder for samples.")

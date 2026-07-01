@@ -66,7 +66,17 @@ if __name__ == "__main__":
 
     print("Initializing data loaders...")
 
-    dataset = EmoDataset(EmoDB,cmudict_path, add_blank, n_fft=n_fft, n_mels=n_feats, hop_length=hop_length, win_length=win_length, f_min=f_min, f_max=f_max)
+    dataset = EmoDataset(
+        EmoDB,
+        cmudict_path,
+        add_blank,
+        n_fft=n_fft,
+        n_mels=n_feats,
+        hop_length=hop_length,
+        win_length=win_length,
+        f_min=f_min,
+        f_max=f_max,
+    )
     batch_collate = EmoBatchCollate(
         dataset.min_div, dataset.emo_features, dataset.mels_count
     )
@@ -79,13 +89,6 @@ if __name__ == "__main__":
         batch_size=params.batch_size,
         collate_fn=batch_collate,
     )
-    test_loader = DataLoader(
-        dataset=test,
-        shuffle=True,
-        batch_size=params.batch_size,
-        collate_fn=batch_collate,
-    )
-
 
     print("Initializing model...")
     model = GradTTS(
@@ -141,8 +144,9 @@ if __name__ == "__main__":
                 model.zero_grad()
                 x, x_lengths = batch["text"].cuda(), batch["text_lengths"].cuda()
                 y, y_lengths = batch["mel"].cuda(), batch["mel_lengths"].cuda()
+                emo_label = batch["emo_label"].cuda()
                 dur_loss, prior_loss, diff_loss = model.compute_loss(
-                    x, x_lengths, y, y_lengths, out_size=out_size
+                    x, x_lengths, y, y_lengths, out_size=out_size, emo_label=emo_label
                 )
                 loss = sum([dur_loss, prior_loss, diff_loss])
                 loss.backward()  # ty:ignore[unresolved-attribute]
@@ -196,7 +200,9 @@ if __name__ == "__main__":
             for i, item in enumerate(test_batch):
                 x = item[0].to(torch.long).unsqueeze(0).cuda()
                 x_lengths = torch.LongTensor([x.shape[-1]]).cuda()
-                y_enc, y_dec, attn = model(x, x_lengths, n_timesteps=50)
+                y_enc, y_dec, attn = model(
+                    x, x_lengths, n_timesteps=50, emo=2, emo_hydrid=0.3
+                )
                 logger.add_image(
                     f"image_{i}/generated_enc",
                     plot_tensor(y_enc.squeeze().cpu()),

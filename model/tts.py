@@ -90,6 +90,8 @@ class GradTTS(BaseModule):
         temperature: float = 1.0,
         stoc: bool = False,
         spk: Optional[torch.Tensor] = None,
+        emo: Optional[int] = None,
+        emo_hydrid: Optional[float] = None,
         length_scale: float = 1.0,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -137,7 +139,9 @@ class GradTTS(BaseModule):
         # Sample latent representation from terminal distribution N(mu_y, I)
         z = mu_y + torch.randn_like(mu_y, device=mu_y.device) / temperature
         # Generate sample by performing reverse dynamics
-        decoder_outputs = self.decoder(z, y_mask, mu_y, n_timesteps, stoc, spk)
+        decoder_outputs = self.decoder(
+            z, y_mask, mu_y, n_timesteps, stoc, spk, emo, emo_hydrid
+        )
         decoder_outputs = decoder_outputs[:, :, :y_max_length]
 
         return encoder_outputs, decoder_outputs, attn[:, :, :y_max_length]
@@ -148,6 +152,7 @@ class GradTTS(BaseModule):
         x_lengths: torch.Tensor,
         y: torch.Tensor,
         y_lengths: torch.Tensor,
+        emo_label: Optional[torch.Tensor] = None,
         spk: Optional[torch.Tensor] = None,
         out_size: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -236,7 +241,9 @@ class GradTTS(BaseModule):
         mu_y = mu_y.transpose(1, 2)
 
         # Compute loss of score-based decoder
-        diff_loss, xt = self.decoder.compute_loss(y, y_mask, mu_y, spk)
+        diff_loss, xt = self.decoder.compute_loss(
+            y, y_mask, mu_y, emo_label=emo_label, spk=spk
+        )
 
         # Compute loss between aligned encoder outputs and mel-spectrogram
         prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
