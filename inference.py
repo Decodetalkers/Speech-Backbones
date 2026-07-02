@@ -52,7 +52,7 @@ if __name__ == "__main__":
         "--timesteps",
         type=int,
         required=False,
-        default=10,
+        default=30,
         help="number of timesteps of reverse diffusion",
     )
     parser.add_argument(
@@ -116,11 +116,11 @@ if __name__ == "__main__":
                 x_lengths,
                 n_timesteps=args.timesteps,
                 temperature=1.5,
-                stoc=False,
+                stoc=True,
                 spk=spk,
                 length_scale=0.91,
-                emo=1,
-                emo_hydrid=0.0,
+                emo=4,
+                emo_hydrid=0.5,
             )
             t = (dt.datetime.now() - t).total_seconds()
             print(f"Grad-TTS RTF: {t * 22050 / (y_dec.shape[-1] * 256)}")

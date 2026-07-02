@@ -383,7 +383,6 @@ class Diffusion(BaseModule):
         xt = mean + z * torch.sqrt(variance)
         return xt * mask, z * mask
 
-    # FIXME: I need it do not grade, but I need the grad
     @torch.no_grad
     def reverse_diffusion(
         self,
@@ -416,12 +415,21 @@ class Diffusion(BaseModule):
                         xt_copy, mask, mu, t, spk
                     ).squeeze()
                     emo_now = torch.zeros(5, device=z.device)
+                    emo_now[0] = 1
+                    loss = self.emo_loss(target, emo_now)
+                    grads_zero = torch.autograd.grad(outputs=loss, inputs=xt_copy)[0]
+                with torch.enable_grad():
+                    self.emo_estimtor.train()
+                    xt_copy = xt.detach().clone().requires_grad_(True)
+                    target = self.emo_estimtor.forward(
+                        xt_copy, mask, mu, t, spk
+                    ).squeeze()
+                    emo_now = torch.zeros(5, device=z.device)
                     emo_now[emo] = 1
                     loss = self.emo_loss(target, emo_now)
                     grads = torch.autograd.grad(outputs=loss, inputs=xt_copy)[0]
-
-                emo_noise = grads * emo_hydrid
-                emo_noise = emo_noise[:, :, : xt.shape[-1]]
+                emo_noise = grads * emo_hydrid + grads_zero * (1 - emo_hydrid)
+                emo_noise = emo_noise
             time = t.unsqueeze(-1).unsqueeze(-1)
             noise_t = get_noise(time, self.beta_min, self.beta_max, cumulative=False)
             if stoc:  # adds stochastic term
@@ -471,7 +479,6 @@ class Diffusion(BaseModule):
         noise_estimation *= torch.sqrt(1.0 - torch.exp(-cum_noise))
         loss = torch.sum((noise_estimation + z) ** 2) / (torch.sum(mask) * self.n_feats)
         emo_loss = None
-        # TODO: it is not a good way to let loss together
         if emo_label is not None:
             label_predict = self.emo_estimtor.train_label(xt, mask, mu, t, spk)
             emo_loss = self.emo_loss(label_predict, emo_label.float())
