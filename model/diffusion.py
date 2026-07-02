@@ -139,18 +139,23 @@ class EmoClassify(torch.nn.Module):
 
     def __init__(
         self,
+        noise_dim: int,
         n_mels: int,
         out_features: int,
         hidden_dim: int = 1024,
         num_layers: int = 1,
-        time_embedding_dim: int = 256,
         dropout: float = 0.1,
         tau: float = 0.01,
+        pe_scale: int = 1000,
+        n_spks: int = 1,
+        spk_emb_dim: int = 64,
     ):
         super(EmoClassify, self).__init__()
 
         self.tau = tau
-        self.unet = Unet(time_embedding_dim, in_channels=1, out_channels=1)
+        self.unetlike = GradLogPEstimator2d(
+            noise_dim, spk_emb_dim=spk_emb_dim, pe_scale=pe_scale, n_spks=n_spks
+        )
 
         self.lstm = torch.nn.LSTM(
             n_mels,
@@ -164,29 +169,37 @@ class EmoClassify(torch.nn.Module):
         self.softmax = torch.nn.Softmax(dim=-1)
 
     def forward(
-        self, x_0: torch.Tensor, timestamp: Optional[torch.Tensor] = None
+        self,
+        x_t: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        timestamp: torch.Tensor,
+        spk: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        x_0 = x_0.unsqueeze(dim=1)
-        x_0 = self.unet(x_0, timestamp)
-        x_0 = x_0.squeeze()
-        x_0 = x_0.transpose(-1, -2)
-        x_0, (_hidden, _cell) = self.lstm(x_0)
-        x_0 = self.linear(x_0)
-        x_0 = x_0.mean(dim=-2)
-        x_0 = self.softmax(x_0)
-
-        return x_0
+        # x_t = x_t.unsqueeze(dim=1)
+        x_t = self.unetlike(x_t, mask, mu, timestamp, spk)
+        x_t = x_t.transpose(-1, -2)
+        x_t, (_hidden, _cell) = self.lstm(x_t)
+        x_t = self.linear(x_t)
+        x_t = x_t.mean(dim=-2)
+        x_t = self.softmax(x_t)
+        return x_t
 
     def train_label(
-        self, x_0: torch.Tensor, timestamp: Optional[torch.Tensor] = None
+        self,
+        x_t: torch.Tensor,
+        mask: torch.Tensor,
+        mu: torch.Tensor,
+        timestamp: torch.Tensor,
+        spk: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         this part make the biggest label stronger, in order to predict the right label
         Only used in training process
         """
-        x_0 = self.forward(x_0, timestamp)
-        x_0 = self.softmax(x_0 / self.tau)
-        return x_0
+        x_t = self.forward(x_t, mask, mu, timestamp, spk)
+        x_t = self.softmax(x_t / self.tau)
+        return x_t
 
 
 # In fact, it is unet(Like)
@@ -331,7 +344,6 @@ class Diffusion(BaseModule):
         beta_min: float = 0.05,
         beta_max: int | float = 20,
         pe_scale: int = 1000,
-        time_embedding_dim: int = 128,
     ):
         super(Diffusion, self).__init__()
         self.n_feats = n_feats
@@ -346,7 +358,12 @@ class Diffusion(BaseModule):
             dim, n_spks=n_spks, spk_emb_dim=self.spk_emb_dim, pe_scale=pe_scale
         )
         self.emo_estimtor = EmoClassify(
-            n_feats, EMO_FEATURES, time_embedding_dim=time_embedding_dim
+            dim,
+            n_feats,
+            EMO_FEATURES,
+            n_spks=n_spks,
+            spk_emb_dim=self.spk_emb_dim,
+            pe_scale=pe_scale,
         )
         self.mel_div = max_2_div(n_feats)
         self.emo_loss = torch.nn.CrossEntropyLoss()
@@ -385,31 +402,26 @@ class Diffusion(BaseModule):
             t = (1.0 - (i + 0.5) * h) * torch.ones(
                 z.shape[0], dtype=z.dtype, device=z.device
             )
-            emo_noise = torch.zeros(z.shape, device=z.device).detach().clone().requires_grad_(True)
+            emo_noise = (
+                torch.zeros(z.shape, device=z.device)
+                .detach()
+                .clone()
+                .requires_grad_(True)
+            )
             if emo is not None and emo_hydrid is not None:
-
                 with torch.enable_grad():
                     self.emo_estimtor.train()
-                    mel_max_len = xt.shape[-1]
-                    for _ in range(self.mel_div):
-                        if mel_max_len % self.mel_div == 0:
-                            break
-                        mel_max_len += 1
-                    xt_copy = torch.zeros(
-                        (xt.shape[0], xt.shape[1], mel_max_len),
-                        dtype=torch.float32,
-                        device=xt.device,
-                    )
-                    xt_copy[:, :, : xt.shape[-1]] = xt
-                    xt_copy = xt_copy.detach().clone().requires_grad_(True)
-                    target = self.emo_estimtor.forward(xt_copy, t)
+                    xt_copy = xt.detach().clone().requires_grad_(True)
+                    target = self.emo_estimtor.forward(
+                        xt_copy, mask, mu, t, spk
+                    ).squeeze()
                     emo_now = torch.zeros(5, device=z.device)
                     emo_now[emo] = 1
                     loss = self.emo_loss(target, emo_now)
                     grads = torch.autograd.grad(outputs=loss, inputs=xt_copy)[0]
 
                 emo_noise = grads * emo_hydrid
-                emo_noise = emo_noise[:,:,:xt.shape[-1]]
+                emo_noise = emo_noise[:, :, : xt.shape[-1]]
             time = t.unsqueeze(-1).unsqueeze(-1)
             noise_t = get_noise(time, self.beta_min, self.beta_max, cumulative=False)
             if stoc:  # adds stochastic term
@@ -451,29 +463,19 @@ class Diffusion(BaseModule):
         t: torch.Tensor,
         emo_label: Optional[torch.Tensor] = None,
         spk: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         xt, z = self.forward_diffusion(x0, mask, mu, t)
         time = t.unsqueeze(-1).unsqueeze(-1)
         cum_noise = get_noise(time, self.beta_min, self.beta_max, cumulative=True)
         noise_estimation = self.estimator(xt, mask, mu, t, spk)
         noise_estimation *= torch.sqrt(1.0 - torch.exp(-cum_noise))
         loss = torch.sum((noise_estimation + z) ** 2) / (torch.sum(mask) * self.n_feats)
+        emo_loss = None
         # TODO: it is not a good way to let loss together
         if emo_label is not None:
-            mel_max_len = xt.shape[-1]
-            for _ in range(self.mel_div):
-                if mel_max_len % self.mel_div == 0:
-                    break
-                mel_max_len += 1
-                xt_copy = torch.zeros(
-                    (xt.shape[0], xt.shape[1], mel_max_len),
-                    dtype=torch.float32,
-                    device=xt.device,
-                )
-                xt_copy[:, :, : xt.shape[-1]] = xt
-            label_predict = self.emo_estimtor.train_label(xt_copy, t)
-            loss += self.emo_loss(label_predict, emo_label.float())
-        return loss, xt
+            label_predict = self.emo_estimtor.train_label(xt, mask, mu, t, spk)
+            emo_loss = self.emo_loss(label_predict, emo_label.float())
+        return loss, xt, emo_loss
 
     # NOTE: modify it
     def compute_loss(
@@ -484,7 +486,7 @@ class Diffusion(BaseModule):
         emo_label: Optional[torch.Tensor] = None,
         spk: Optional[torch.Tensor] = None,
         offset: float = 1e-5,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         t = torch.rand(
             x0.shape[0], dtype=x0.dtype, device=x0.device, requires_grad=False
         )

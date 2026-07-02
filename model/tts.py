@@ -155,7 +155,7 @@ class GradTTS(BaseModule):
         emo_label: Optional[torch.Tensor] = None,
         spk: Optional[torch.Tensor] = None,
         out_size: Optional[int] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """
         Computes 3 losses:
             1. duration loss: loss between predicted token durations and those extracted by Monotonic Alignment Search (MAS).
@@ -241,7 +241,7 @@ class GradTTS(BaseModule):
         mu_y = mu_y.transpose(1, 2)
 
         # Compute loss of score-based decoder
-        diff_loss, xt = self.decoder.compute_loss(
+        diff_loss, xt, emo_loss = self.decoder.compute_loss(
             y, y_mask, mu_y, emo_label=emo_label, spk=spk
         )
 
@@ -249,4 +249,4 @@ class GradTTS(BaseModule):
         prior_loss = torch.sum(0.5 * ((y - mu_y) ** 2 + math.log(2 * math.pi)) * y_mask)
         prior_loss = prior_loss / (torch.sum(y_mask) * self.n_feats)
 
-        return dur_loss, prior_loss, diff_loss
+        return dur_loss, prior_loss, diff_loss, emo_loss

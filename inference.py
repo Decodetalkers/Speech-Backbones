@@ -119,8 +119,8 @@ if __name__ == "__main__":
                 stoc=False,
                 spk=spk,
                 length_scale=0.91,
-                emo=2,
-                emo_hydrid=0.5,
+                emo=1,
+                emo_hydrid=0.0,
             )
             t = (dt.datetime.now() - t).total_seconds()
             print(f"Grad-TTS RTF: {t * 22050 / (y_dec.shape[-1] * 256)}")

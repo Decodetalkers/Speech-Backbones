@@ -139,16 +139,19 @@ if __name__ == "__main__":
         dur_losses = []
         prior_losses = []
         diff_losses = []
+        emo_losses = []
         with tqdm(train_loader, total=len(train_dataset) // batch_size) as progress_bar:
             for batch_idx, batch in enumerate(progress_bar):
                 model.zero_grad()
                 x, x_lengths = batch["text"].cuda(), batch["text_lengths"].cuda()
                 y, y_lengths = batch["mel"].cuda(), batch["mel_lengths"].cuda()
                 emo_label = batch["emo_label"].cuda()
-                dur_loss, prior_loss, diff_loss = model.compute_loss(
+                dur_loss, prior_loss, diff_loss, emo_loss = model.compute_loss(
                     x, x_lengths, y, y_lengths, out_size=out_size, emo_label=emo_label
                 )
                 loss = sum([dur_loss, prior_loss, diff_loss])
+                if emo_loss is not None:
+                    loss = sum([loss, emo_loss])
                 loss.backward()  # ty:ignore[unresolved-attribute]
 
                 enc_grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -179,8 +182,14 @@ if __name__ == "__main__":
                 prior_losses.append(prior_loss.item())
                 diff_losses.append(diff_loss.item())
 
+                if emo_loss is not None:
+                    emo_losses.append(emo_loss.item())
+
                 if batch_idx % 5 == 0:
-                    msg = f"Epoch: {epoch}, iteration: {iteration} | dur_loss: {dur_loss.item()}, prior_loss: {prior_loss.item()}, diff_loss: {diff_loss.item()}"
+                    if emo_loss is None:
+                        msg = f"Epoch: {epoch}, iteration: {iteration} | dur_loss: {dur_loss.item()}, prior_loss: {prior_loss.item()}, diff_loss: {diff_loss.item()}"
+                    else:
+                        msg = f"Epoch: {epoch}, iteration: {iteration} | dur_loss: {dur_loss.item()}, prior_loss: {prior_loss.item()}, diff_loss: {diff_loss.item()}, emo_loss: {emo_loss.item()}"
                     progress_bar.set_description(msg)
 
                 iteration += 1
@@ -188,6 +197,8 @@ if __name__ == "__main__":
         log_msg = "Epoch %d: duration loss = %.3f " % (epoch, np.mean(dur_losses))
         log_msg += "| prior loss = %.3f " % np.mean(prior_losses)
         log_msg += "| diffusion loss = %.3f\n" % np.mean(diff_losses)
+        if len(emo_losses) != 0:
+            log_msg += "| emo loss = %.3f\n" % np.mean(emo_losses)
         with open(f"{log_dir}/train.log", "a") as f:
             f.write(log_msg)
 
