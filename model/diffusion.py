@@ -395,13 +395,13 @@ class Diffusion(BaseModule):
                         if mel_max_len % self.mel_div == 0:
                             break
                         mel_max_len += 1
-                        xt_copy = torch.zeros(
-                            (xt.shape[0], xt.shape[1], mel_max_len),
-                            dtype=torch.float32,
-                            device=xt.device,
-                        )
-                        xt_copy[:, :, : xt.shape[-1]] = xt
-                        xt_copy = xt_copy.detach().clone().requires_grad_(True)
+                    xt_copy = torch.zeros(
+                        (xt.shape[0], xt.shape[1], mel_max_len),
+                        dtype=torch.float32,
+                        device=xt.device,
+                    )
+                    xt_copy[:, :, : xt.shape[-1]] = xt
+                    xt_copy = xt_copy.detach().clone().requires_grad_(True)
                     target = self.emo_estimtor.forward(xt_copy, t)
                     emo_now = torch.zeros(5, device=z.device)
                     emo_now[emo] = 1
