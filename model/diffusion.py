@@ -385,31 +385,31 @@ class Diffusion(BaseModule):
             t = (1.0 - (i + 0.5) * h) * torch.ones(
                 z.shape[0], dtype=z.dtype, device=z.device
             )
-            emo_noise = torch.zeros(z.shape, device=z.device)
+            emo_noise = torch.zeros(z.shape, device=z.device).detach().clone().requires_grad_(True)
             if emo is not None and emo_hydrid is not None:
-                mel_max_len = xt.shape[-1]
-                for _ in range(self.mel_div):
-                    if mel_max_len % self.mel_div == 0:
-                        break
-                    mel_max_len += 1
-                    xt_copy = torch.zeros(
-                        (xt.shape[0], xt.shape[1], mel_max_len),
-                        dtype=torch.float32,
-                        device=xt.device,
-                    )
-                    xt_copy[:, :, : xt.shape[-1]] = xt
-                grad = torch.autograd.functional.jacobian(self.emo_estimtor, (xt_copy, t))
-                target = self.emo_estimtor.forward(xt_copy, t)
-                print(grad)
-                grad = torch.autograd.grad(
-                    target.sum(),
-                    xt_copy,
-                )[0]
-                print(grad.shape)
-                emo_now = torch.zeros(5)
-                emo_now[0] = 1.0 - emo_hydrid
-                emo_now[emo] = emo_hydrid
-                emo_noise = grad * emo_now
+
+                with torch.enable_grad():
+                    self.emo_estimtor.train()
+                    mel_max_len = xt.shape[-1]
+                    for _ in range(self.mel_div):
+                        if mel_max_len % self.mel_div == 0:
+                            break
+                        mel_max_len += 1
+                        xt_copy = torch.zeros(
+                            (xt.shape[0], xt.shape[1], mel_max_len),
+                            dtype=torch.float32,
+                            device=xt.device,
+                        )
+                        xt_copy[:, :, : xt.shape[-1]] = xt
+                        xt_copy = xt_copy.detach().clone().requires_grad_(True)
+                    target = self.emo_estimtor.forward(xt_copy, t)
+                    emo_now = torch.zeros(5, device=z.device)
+                    emo_now[emo] = 1
+                    loss = self.emo_loss(target, emo_now)
+                    grads = torch.autograd.grad(outputs=loss, inputs=xt_copy)[0]
+
+                emo_noise = grads * emo_hydrid
+                emo_noise = emo_noise[:,:,:xt.shape[-1]]
             time = t.unsqueeze(-1).unsqueeze(-1)
             noise_t = get_noise(time, self.beta_min, self.beta_max, cumulative=False)
             if stoc:  # adds stochastic term
@@ -471,7 +471,7 @@ class Diffusion(BaseModule):
                     device=xt.device,
                 )
                 xt_copy[:, :, : xt.shape[-1]] = xt
-            label_predict = self.emo_estimtor(xt_copy, t)
+            label_predict = self.emo_estimtor.train_label(xt_copy, t)
             loss += self.emo_loss(label_predict, emo_label.float())
         return loss, xt
 
